@@ -556,8 +556,9 @@ function applyData(parsed) {
     S.week = parsed.week || 1;
     S.day = parsed.day || 1;
   } else {
-    // First load with new program — start fresh at W1/D1, preserve health & maxes
+    // First load with new program — start fresh at W1/D1, preserve health & maxes only
     S.program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+    S.logs = {};
     S.doneDays = {};
     S.week = 1;
     S.day = 1;
