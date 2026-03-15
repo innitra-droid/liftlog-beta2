@@ -37,6 +37,17 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .prog-ex-btn{flex-shrink:0;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--sub);font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
 .prog-ex-btn.active{background:var(--card2);color:var(--text);border-color:var(--sub)}
 .pe-reps{font-size:.72rem;color:var(--sub);margin-top:1px}
+.maxes-board{display:flex;flex-direction:column;gap:6px;padding-bottom:20px}
+.max-row{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .15s}
+.max-row:hover{border-color:var(--accent)}
+.max-row.has-data{border-color:rgba(200,255,0,.2)}
+.max-row-left{flex:1;min-width:0}
+.max-row-name{font-size:.9rem;font-weight:600;color:var(--text)}
+.max-row-day{font-size:.65rem;color:var(--muted);margin-top:1px;text-transform:uppercase;letter-spacing:.8px}
+.max-row-right{text-align:right;flex-shrink:0;margin-left:12px}
+.max-row-weight{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--accent);line-height:1}
+.max-row-reps{font-size:.7rem;color:var(--sub);margin-top:1px}
+.max-row-empty{font-size:.8rem;color:var(--muted)}
 .tbl-export-btn{margin:0 16px 12px;padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s}
 .tbl-export-btn:hover{border-color:var(--accent);color:var(--accent)}
 #healthView{padding-bottom:80px}
@@ -226,6 +237,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ex-card{animation:fadeUp .18s ease both}
+.badge-rpe{background:rgba(200,255,0,.15);color:var(--accent);border:1px solid rgba(200,255,0,.4);font-size:.58rem;border-radius:5px;padding:1px 7px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+.badge-rpe.rpe-peak{background:rgba(255,77,77,.15);color:#ff6b6b;border:1px solid rgba(255,77,77,.4)}
+.rpe-target-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid rgba(200,255,0,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+.rpe-target-bar.rpe-peak-bar{border-color:rgba(255,77,77,.3);background:rgba(255,77,77,.05)}
+.rpe-target-label{font-size:.6rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+.rpe-target-val{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--accent);line-height:1}
+.rpe-target-bar.rpe-peak-bar .rpe-target-val{color:#ff6b6b}
+.rpe-target-desc{font-size:.68rem;color:var(--sub);margin-left:auto}
 </style>
 </head>
 <body>
@@ -279,12 +298,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   </div>
   <div class="prog-inner">
     <div style="display:flex;gap:8px;margin:14px 0 16px">
-      <button class="prog-view-tab active" id="pvtLog" onclick="setProgView('log')">&#128196; Log</button>
-      <button class="prog-view-tab" id="pvtGraph" onclick="setProgView('graph')">&#128200; Graphs</button>
+      <button class="prog-view-tab active" id="pvtLog" onclick="setProgView('log')">&#127942; Maxes</button>
+      <button class="prog-view-tab" id="pvtGraph" onclick="setProgView('graph')">&#128200; Graph</button>
     </div>
     <div id="progLogTab">
-      <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px">Select Exercise</div>
-      <div id="progExPicker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px"></div>
       <div id="progLogContent"></div>
     </div>
     <div id="progGraphTab" style="display:none">
@@ -351,8 +368,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <div class="modal-ov" id="maxModal">
   <div class="modal">
     <h3>Update Maxes</h3>
-    <div class="mf"><label>Squat (kg)</label><input type="number" id="mxSq" inputmode="decimal"></div>
-    <div class="mf"><label>Deadlift (kg)</label><input type="number" id="mxDl" inputmode="decimal"></div>
+    <div class="mf"><label>HB Squat (kg)</label><input type="number" id="mxSq" inputmode="decimal"></div>
+    <div class="mf"><label>Sumo Deadlift (kg)</label><input type="number" id="mxDl" inputmode="decimal"></div>
     <div class="mf"><label>Bench (kg)</label><input type="number" id="mxBn" inputmode="decimal"></div>
     <div class="modal-acts">
       <button class="btn-s" onclick="closeModal()">Cancel</button>
@@ -372,52 +389,47 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 <script>
 var DEFAULT_PROGRAM = [
-  { day:1, name:'Day 1', rest:false, exercises:[
-    {id:'d1e1',name:'Squat',v:'Competition',type:'main'},
-    {id:'d1e2',name:'Squat Backoff',v:'',type:'backoff'},
-    {id:'d1e3',name:'Bench Press',v:'Floor',type:'main'},
-    {id:'d1e4',name:'Bench Backoff',v:'',type:'backoff'},
-    {id:'d1e5',name:'Leg Press',v:'Squat Assistance',type:'accessory'},
-    {id:'d1e6',name:'Quad Extensions',v:'',type:'accessory'},
-    {id:'d1e7',name:'Decline Flies',v:'Pec Accessory',type:'accessory'},
-    {id:'d1e8',name:'Triceps 1',v:'Cable Pushdown',type:'accessory'},
-    {id:'d1e9',name:'Triceps 2',v:'OH Extension',type:'accessory'},
-    {id:'d1e10',name:'Chins',v:'Wide Grip',type:'accessory'}
+  { day:1, name:'Mon', rest:false, exercises:[
+    {id:'d1e1',name:'High Bar Squat',v:'Top Set — 1×1–3',type:'main'},
+    {id:'d1e2',name:'High Bar Squat',v:'Back-off — 4×5 · fixed from W1',type:'backoff'},
+    {id:'d1e3',name:'Bench Press',v:'Top Single',type:'main'},
+    {id:'d1e4',name:'Bench Press',v:'Back-off — 4×5 · approx −20% of top single · fixed from W1',type:'backoff'},
+    {id:'d1e5',name:'Upper Back Row',v:'Chest supported · 3×6–8 · RPE 8–9',type:'accessory'},
+    {id:'d1e6',name:'Lat Pulldown',v:'Chest supported · 2–3×6–8 · RPE 8–9',type:'accessory'},
+    {id:'d1e7',name:'Pec Fly',v:'Full ROM · 2×8–12 · RPE 9',type:'accessory'}
   ]},
-  { day:2, name:'Day 2', rest:true, restLabel:'Cardio', restEmoji:'&#128692;', exercises:[] },
-  { day:3, name:'Day 3', rest:false, exercises:[
-    {id:'d3e1',name:'Deadlift',v:'Competition',type:'main'},
-    {id:'d3e2',name:'Deadlift Backoff',v:'',type:'backoff'},
-    {id:'d3e3',name:'Shrugs',v:'',type:'accessory'},
-    {id:'d3e4',name:'Hypers',v:'',type:'accessory'},
-    {id:'d3e5',name:'Jeffersons',v:'BW',type:'accessory'},
-    {id:'d3e6',name:'Wide Grip Chins',v:'',type:'accessory'},
-    {id:'d3e7',name:'Biceps 1',v:'',type:'accessory'},
-    {id:'d3e8',name:'Biceps 2',v:'',type:'accessory'},
-    {id:'d3e9',name:'Abs',v:'',type:'accessory'}
+  { day:2, name:'Tue', rest:false, exercises:[
+    {id:'d2e1',name:'Sumo Deadlift',v:'Top Set — 1×2–3',type:'main'},
+    {id:'d2e2',name:'Sumo Deadlift',v:'Back-off — 3×4 · ~60% 1RM · fixed from W1',type:'backoff'},
+    {id:'d2e3',name:'Floor Press',v:'Ascending 3×5 · RPE 5 / 6 / 7',type:'straight sets'},
+    {id:'d2e4',name:'Upper Back Row',v:'Narrow · chest supported · 3×6–8 · RPE 8–9',type:'accessory'},
+    {id:'d2e5',name:'Lat Pulldown',v:'2–3×8–10 · RPE 9',type:'accessory'},
+    {id:'d2e6',name:'Hamstring Curl',v:'3×8–10 · RPE 9',type:'accessory'},
+    {id:'d2e7',name:'Bicep Curl',v:'3×8–10 · RPE 9',type:'accessory'}
   ]},
-  { day:4, name:'Day 4', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[] },
-  { day:5, name:'Day 5', rest:false, exercises:[
-    {id:'d5e1',name:'Bench Press',v:'Competition',type:'main'},
-    {id:'d5e2',name:'Bench Backoff',v:'',type:'backoff'},
-    {id:'d5e3',name:'Squat',v:'Alternative',type:'main'},
-    {id:'d5e4',name:'Triceps 1',v:'',type:'accessory'},
-    {id:'d5e5',name:'Triceps 2',v:'',type:'accessory'},
-    {id:'d5e6',name:'Pec Accessory',v:'',type:'accessory'},
-    {id:'d5e7',name:'Biceps 1',v:'',type:'accessory'},
-    {id:'d5e8',name:'Biceps 2',v:'',type:'accessory'}
+  { day:3, name:'Wed', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[] },
+  { day:4, name:'Thu', rest:false, exercises:[
+    {id:'d4e1',name:'Low Bar Squat',v:'Top Set — 1×4–5 · lighter than Mon',type:'main'},
+    {id:'d4e2',name:'Low Bar Squat',v:'Back-off — 3×4–5 · fixed from W1',type:'backoff'},
+    {id:'d4e3',name:'Bench Press',v:'Tertiary single — RPE 5–6 · lighter than Mon',type:'main'},
+    {id:'d4e4',name:'Wide Grip Block',v:'3×8 · RPE 6 / 7 / 7',type:'straight sets'},
+    {id:'d4e5',name:'Tricep Extension',v:'Overhead long head · 3×8–10 · RPE 9',type:'accessory'},
+    {id:'d4e6',name:'Side Delt',v:'Machine · 3×10–12 · RPE 9',type:'accessory'},
+    {id:'d4e7',name:'Shoulder Press',v:'Machine · 2×8–10 · RPE 8–9',type:'accessory'},
+    {id:'d4e8',name:'Core / Abs',v:'3×10–15 · RPE 8–9',type:'accessory'}
   ]},
-  { day:6, name:'Day 6', rest:false, exercises:[
-    {id:'d6e1',name:'Romanian Deadlift',v:'',type:'main'},
-    {id:'d6e2',name:'Nordics',v:'',type:'accessory'},
-    {id:'d6e3',name:'Deadlift Backoff',v:'',type:'backoff'},
-    {id:'d6e4',name:'BOR',v:'Barbell Row',type:'accessory'},
-    {id:'d6e5',name:'Squat',v:'Light',type:'accessory'},
-    {id:'d6e6',name:'Bench',v:'Light',type:'accessory'},
-    {id:'d6e7',name:'Abs',v:'',type:'accessory'},
-    {id:'d6e8',name:'Biceps 1',v:'',type:'accessory'},
-    {id:'d6e9',name:'Biceps 2',v:'',type:'accessory'}
-  ]}
+  { day:5, name:'Fri', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[] },
+  { day:6, name:'Sat', rest:false, exercises:[
+    {id:'d6e1',name:'RDL',v:'2–3×5–8 · RPE climbs W1→W5: 6→8',type:'straight sets'},
+    {id:'d6e2',name:'Quad',v:'No lower back · 2×8–12 · RPE 9',type:'accessory'},
+    {id:'d6e3',name:'Glute / Hip Extension',v:'2×8–10 · RPE 8–9',type:'accessory'},
+    {id:'d6e4',name:'Hip Adductor',v:'2×10–15 · RPE 8–9',type:'accessory'},
+    {id:'d6e5',name:'Calf Raise',v:'2×8–12 · RPE 8–9',type:'accessory'},
+    {id:'d6e6',name:'Rear Delt',v:'3×10–12 · RPE 9',type:'accessory'},
+    {id:'d6e7',name:'Bicep Curl',v:'Alternate angle · 2×8–10 · RPE 9',type:'accessory'},
+    {id:'d6e8',name:'Bench 4',v:'Optional · DB / Machine chest press · 2–3×8–12 · RPE 8',type:'accessory'}
+  ]},
+  { day:7, name:'Sun', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[] }
 ];
 
 // State
@@ -429,7 +441,7 @@ var S = {
   week: 1,
   day: 1,
   editDay: 1,
-  progLift: 'Squat',
+  progLift: 'High Bar Squat',
   health: {}
 };
 
@@ -534,14 +546,25 @@ function load() {
 
 function applyData(parsed) {
   S.maxes = parsed.maxes || S.maxes;
-  if (parsed.program && parsed.program.length > 0) S.program = parsed.program;
-  S.logs = parsed.logs || {};
-  S.doneDays = parsed.doneDays || {};
-  S.week = parsed.week || 1;
-  S.day = parsed.day || 1;
-  S.editDay = parsed.editDay || 1;
-  S.progLift = parsed.progLift || 'Squat';
   S.health = parsed.health || {};
+  S.logs = parsed.logs || {};
+  // Detect if this is first load with the v3 program or a returning v3 user
+  if (parsed.programVersion === 'v3') {
+    // Returning user on new program — restore their position
+    S.program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+    S.doneDays = parsed.doneDays || {};
+    S.week = parsed.week || 1;
+    S.day = parsed.day || 1;
+  } else {
+    // First load with new program — start fresh at W1/D1, preserve health & maxes
+    S.program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+    S.doneDays = {};
+    S.week = 1;
+    S.day = 1;
+  }
+  S.programVersion = 'v3';
+  S.editDay = parsed.editDay || 1;
+  S.progLift = parsed.progLift || 'High Bar Squat';
 }
 
 function loadFromLocal() {
@@ -637,8 +660,8 @@ function openView(id) {
 // Maxes
 function renderMaxes() {
   var items = [
-    {lbl:'Squat', v:S.maxes.squat},
-    {lbl:'Deadlift', v:S.maxes.deadlift},
+    {lbl:'HB Squat', v:S.maxes.squat},
+    {lbl:'Sumo DL', v:S.maxes.deadlift},
     {lbl:'Bench', v:S.maxes.bench}
   ];
   var html = '';
@@ -737,7 +760,7 @@ function renderDayContent() {
       if (!S.logs[S.week][S.day]) S.logs[S.week][S.day] = {};
       if (!S.logs[S.week][S.day]['cardio']) S.logs[S.week][S.day]['cardio'] = {mode:'',setting:'',speed:'',duration:'',notes:''};
       var clog = S.logs[S.week][S.day]['cardio'];
-      cont.innerHTML = '<div style="padding:20px 0 8px">'
+      var html = '<div style="padding:20px 0 8px">'
         + '<div class="section-label">Cardio Session</div>'
         + '<div class="ex-card" style="margin-bottom:10px"><div style="padding:14px;display:grid;gap:10px">'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
@@ -750,17 +773,23 @@ function renderDayContent() {
         + '<div><div style="font-size:.6rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Duration (min)</div>'
         + '<input class="set-inp" type="text" placeholder="e.g. 30" id="cDuration" value="'+(clog.duration||'')+'" onchange="saveCardio()"></div>'
         + '</div><textarea class="notes-ta" rows="2" placeholder="Notes..." id="cNotes" onchange="saveCardio()">'+(clog.notes||'')+'</textarea>'
-        + '</div></div></div>'
-        + '<button class="complete-btn'+(isDone?' done':'')+'" onclick="toggleDayDone()">'+(isDone?'&#10003; LOGGED':'MARK COMPLETE')+'</button>';
+        + '</div></div></div>';
+      if (dayData.exercises && dayData.exercises.length > 0) {
+        html += '<div class="section-label">Accessories</div>';
+        for (var i = 0; i < dayData.exercises.length; i++) html += buildExCard(dayData.exercises[i]);
+      }
+      html += '<button class="complete-btn'+(isDone?' done':'')+'" onclick="toggleDayDone()">'+(isDone?'&#10003; COMPLETE':'MARK COMPLETE')+'</button>';
+      cont.innerHTML = html;
+      attachListeners();
       return;
     }
     cont.innerHTML = '<div class="rest-screen">'
       + '<div class="ri">' + (dayData.restEmoji || '&#128564;') + '</div>'
       + '<h2>' + (dayData.restLabel || 'Rest') + ' Day</h2>'
-      + '<p>' + (dayData.restLabel === 'Cardio' ? 'Active recovery' : 'Recovery is part of training') + '</p>'
+      + '<p>Recovery is part of training</p>'
       + '</div>'
       + '<button class="complete-btn' + (isDone ? ' done' : '') + '" onclick="toggleDayDone()">'
-      + (isDone ? '&#10003; LOGGED' : 'MARK COMPLETE') + '</button>';
+      + (isDone ? '&#10003; COMPLETE' : 'MARK COMPLETE') + '</button>';
     return;
   }
 
@@ -780,9 +809,22 @@ function renderDayContent() {
     for (var i = 0; i < accEx.length; i++) html += buildExCard(accEx[i]);
   }
   html += '<button class="complete-btn' + (isDone ? ' done' : '') + '" onclick="toggleDayDone()">'
-    + (isDone ? '&#10003; DAY COMPLETE' : 'COMPLETE DAY') + '</button>';
+    + (isDone ? '&#10003; COMPLETE' : 'MARK COMPLETE') + '</button>';
   cont.innerHTML = html;
   attachListeners();
+}
+
+// 5-week block RPE wave: W1=5–6, W2=6–7, W3=7, W4=7–8, W5=8–9 (PR week), then repeats
+function getTargetRPE(week) {
+  var wave = [6, 6.5, 7, 7.5, 9];
+  return wave[(week - 1) % 5];
+}
+function getRPERange(week) {
+  var wave = ['5–6', '6–7', '7', '7–8', '8–9'];
+  return wave[(week - 1) % 5];
+}
+function getBlockWeek(week) {
+  return ((week - 1) % 5) + 1;
 }
 
 function buildExCard(ex) {
@@ -792,22 +834,43 @@ function buildExCard(ex) {
   for (var i = 0; i < log.sets.length; i++) { if (!log.sets[i].done) { allDone = false; break; } }
   var doneCount = 0;
   for (var i = 0; i < log.sets.length; i++) { if (log.sets[i].done) doneCount++; }
-  var lastW = (log.sets.length > 0 && log.sets[log.sets.length-1].w) ? ' &middot; ' + log.sets[log.sets.length-1].w + 'kg' : '';
+  var wUnit = 'kg';
+  var lastW = (log.sets.length > 0 && log.sets[log.sets.length-1].w) ? ' &middot; ' + log.sets[log.sets.length-1].w + wUnit : '';
   var summary = log.sets.length > 0 ? (doneCount + '/' + log.sets.length + ' sets logged' + lastW) : 'Tap to log sets';
-  var badgeLabel = ex.type === 'main' ? 'Main' : ex.type === 'backoff' ? 'Backoff' : 'Accessory';
-  var badgeCls = isMain ? 'badge-main' : 'badge-acc';
+  var badgeLabel = ex.type === 'main' ? 'Main' : ex.type === 'backoff' ? 'Backoff' : ex.type === 'straight sets' ? 'Str Sets' : 'Accessory';
+  var badgeCls = (ex.type === 'main' || ex.type === 'straight sets') ? 'badge-main' : 'badge-acc';
+
+  var targetRPE = (ex.type === 'main') ? getTargetRPE(S.week) : null;
+  var blockWk = getBlockWeek(S.week);
+  var isPeak = blockWk === 5;
+  var rpeRange = getRPERange(S.week);
+  var rpeDescs = ['Leave ~4–5 reps in the tank','Leave ~3–4 reps in the tank','Leave ~3 reps in the tank','Leave ~2–3 reps in the tank','★ PR week — push your limit'];
 
   var setRows = '';
   for (var i = 0; i < log.sets.length; i++) {
     var s = log.sets[i];
     setRows += '<div class="set-row">'
       + '<span class="set-num">' + (i+1) + '</span>'
-      + '<input class="set-inp" type="number" inputmode="decimal" placeholder="kg" value="' + (s.w||'') + '" data-exid="' + ex.id + '" data-i="' + i + '" data-f="w">'
+      + '<input class="set-inp" type="number" inputmode="decimal" placeholder="' + wUnit + '" value="' + (s.w||'') + '" data-exid="' + ex.id + '" data-i="' + i + '" data-f="w">'
       + '<input class="set-inp" type="text" placeholder="reps" value="' + (s.r||'') + '" data-exid="' + ex.id + '" data-i="' + i + '" data-f="r">'
       + '<button class="tick-btn' + (s.done ? ' done' : '') + '" onclick="toggleSet(\'' + ex.id + '\',' + i + ')">&#10003;</button>'
       + '<button class="del-set-btn" onclick="deleteSet(\'' + ex.id + '\',' + i + ')" title="Remove">&#10005;</button>'
       + '</div>';
   }
+
+  var rpeBadge = targetRPE !== null
+    ? '<span class="badge-rpe' + (isPeak ? ' rpe-peak' : '') + '">RPE ' + rpeRange + '</span>'
+    : '';
+
+  var rpeBar = targetRPE !== null
+    ? '<div class="rpe-target-bar' + (isPeak ? ' rpe-peak-bar' : '') + '">'
+      + '<div><div class="rpe-target-label">Top Set · Block W' + blockWk + '/5</div><div class="rpe-target-val' + (isPeak ? ' rpe-peak-bar' : '') + '" style="' + (isPeak ? 'color:#ff6b6b' : '') + '">' + rpeRange + '</div></div>'
+      + '<div class="rpe-target-desc">' + rpeDescs[blockWk - 1] + '</div>'
+      + '</div>'
+    : '';
+  var backoffBar = (ex.type === 'backoff')
+    ? '<div class="rpe-target-bar"><div><div class="rpe-target-label">Back-off · Fixed Weight</div><div class="rpe-target-val" style="font-size:.78rem;color:var(--sub)">W1 weight</div></div><div class="rpe-target-desc">Set in Week 1 — do not change for the block</div></div>'
+    : '';
 
   return '<div class="ex-card' + (isMain ? ' main-lift' : '') + (allDone ? ' fully-done' : '') + '" id="ec_' + ex.id + '">'
     + '<div class="ex-header" onclick="toggleCard(\'' + ex.id + '\')">'
@@ -815,11 +878,14 @@ function buildExCard(ex) {
     + '<div class="ex-info">'
     + '<div class="ex-name-row"><span class="ex-name">' + ex.name + '</span>'
     + (ex.v ? '<span class="ex-var">' + ex.v + '</span>' : '')
-    + '<span class="ex-badge ' + badgeCls + '">' + badgeLabel + '</span></div>'
+    + '<span class="ex-badge ' + badgeCls + '">' + badgeLabel + '</span>'
+    + rpeBadge + '</div>'
     + '<div class="ex-summary">' + summary + '</div>'
     + '</div><span class="ex-chevron">&#9662;</span></div>'
     + '<div class="ex-body">'
-    + (log.sets.length > 0 ? '<div class="sets-header"><span>#</span><span>kg</span><span>Reps</span><span>&#10003;</span><span></span></div>' : '')
+    + rpeBar
+    + backoffBar
+    + (log.sets.length > 0 ? '<div class="sets-header"><span>#</span><span>' + wUnit + '</span><span>Reps</span><span>&#10003;</span><span></span></div>' : '')
     + '<div id="sl_' + ex.id + '">' + setRows + '</div>'
     + '<button class="add-set-btn" onclick="addSet(\'' + ex.id + '\')">+ Add Set</button>'
     + '<textarea class="notes-ta" rows="2" placeholder="Notes..." data-notes="' + ex.id + '">' + (log.notes||'') + '</textarea>'
@@ -914,7 +980,8 @@ function refreshSummary(exId) {
   if (!el) return;
   var doneCount = 0;
   for (var i = 0; i < log.sets.length; i++) { if (log.sets[i].done) doneCount++; }
-  var lastW = (log.sets.length > 0 && log.sets[log.sets.length-1].w) ? ' &middot; ' + log.sets[log.sets.length-1].w + 'kg' : '';
+  var wUnit = 'kg';
+  var lastW = (log.sets.length > 0 && log.sets[log.sets.length-1].w) ? ' &middot; ' + log.sets[log.sets.length-1].w + wUnit : '';
   el.innerHTML = log.sets.length > 0 ? (doneCount + '/' + log.sets.length + ' sets logged' + lastW) : 'Tap to log sets';
 }
 function toggleDayDone() {
@@ -934,12 +1001,33 @@ function toggleDayDone() {
 // TABLE — fully editable
 function renderTable() {
   var html = '<table class="prog-table"><thead><tr><th>Exercise</th><th>Type</th>';
-  for (var w = 1; w <= 12; w++) html += '<th>Wk ' + w + '</th>';
+  for (var w = 1; w <= 12; w++) {
+    var bwk = getBlockWeek(w);
+    var rpeR = getRPERange(w);
+    html += '<th>Wk ' + w + '<br><span style="color:' + (bwk===5?'#ff6b6b':'var(--accent)') + ';font-size:.55rem;letter-spacing:.5px">RPE ' + rpeR + '</span></th>';
+  }
   html += '</tr></thead><tbody>';
   for (var di = 0; di < S.program.length; di++) {
     var dayData = S.program[di];
-    if (dayData.rest) continue;
-    html += '<tr class="day-head-row"><td colspan="' + (2+12) + '">' + dayData.name + '</td></tr>';
+    // Skip pure rest days only
+    if (dayData.rest && dayData.restLabel !== 'Cardio') continue;
+    html += '<tr class="day-head-row"><td colspan="' + (2+12) + '">' + dayData.name + (dayData.restLabel === 'Cardio' ? ' — Cardio' : '') + '</td></tr>';
+    // Cardio fields row
+    if (dayData.restLabel === 'Cardio') {
+      var cardioFields = [{key:'mode',label:'Cardio Mode'},{key:'speed',label:'Speed'},{key:'duration',label:'Duration (min)'}];
+      for (var fi = 0; fi < cardioFields.length; fi++) {
+        var fkey = cardioFields[fi].key, flabel = cardioFields[fi].label;
+        html += '<tr><td class="ex-cell">' + flabel + '</td><td style="color:var(--muted);font-size:.72rem">cardio</td>';
+        for (var w = 1; w <= 12; w++) {
+          var clog = S.logs[w] && S.logs[w][dayData.day] && S.logs[w][dayData.day]['cardio'];
+          var val = clog && clog[fkey] ? clog[fkey] : '';
+          html += '<td><input class="tbl-inp" type="text" style="width:80px" placeholder="—" value="' + val + '"'
+            + ' onchange="tblCardioUpd(' + w + ',' + dayData.day + ',\'' + fkey + '\',this.value)"></td>';
+        }
+        html += '</tr>';
+      }
+    }
+    // Exercises (works for both cardio and normal days)
     for (var ei = 0; ei < dayData.exercises.length; ei++) {
       var ex = dayData.exercises[ei];
       html += '<tr>'
@@ -956,14 +1044,23 @@ function renderTable() {
   document.getElementById('tableWrap').innerHTML = html;
 }
 
+function tblCardioUpd(w, day, field, val) {
+  if (!S.logs[w]) S.logs[w] = {};
+  if (!S.logs[w][day]) S.logs[w][day] = {};
+  if (!S.logs[w][day]['cardio']) S.logs[w][day]['cardio'] = {mode:'',setting:'',speed:'',duration:'',notes:''};
+  S.logs[w][day]['cardio'][field] = val;
+  save();
+}
+
 function buildTblCell(w, day, exId) {
   var log = getLog(w, day, exId);
+  var wUnit = 'kg';
   var html = '';
   for (var i = 0; i < log.sets.length; i++) {
     var s = log.sets[i];
     html += '<div class="tbl-set-row">'
       + '<span style="font-size:.62rem;color:var(--muted);min-width:12px">' + (i+1) + '.</span>'
-      + '<input class="tbl-inp" type="number" inputmode="decimal" placeholder="kg" value="' + (s.w||'') + '"'
+      + '<input class="tbl-inp" type="number" inputmode="decimal" placeholder="' + wUnit + '" value="' + (s.w||'') + '"'
       + ' onchange="tblUpd(' + w + ',' + day + ',\'' + exId + '\',' + i + ',\'w\',this.value)">'
       + '<span class="tbl-x">x</span>'
       + '<input class="tbl-inp ri" type="text" placeholder="reps" value="' + (s.r||'') + '"'
@@ -1012,6 +1109,23 @@ function exportCSV() {
   for (var w = 1; w <= 12; w++) {
     for (var di = 0; di < S.program.length; di++) {
       var dd = S.program[di];
+      // Cardio day — export cardio session + any exercises
+      if (dd.rest && dd.restLabel === 'Cardio') {
+        var clog = S.logs[w] && S.logs[w][dd.day] && S.logs[w][dd.day]['cardio'];
+        if (clog && (clog.mode || clog.speed || clog.duration)) {
+          rows.push([w, dd.name, 'Cardio', 'cardio', '', clog.mode||'', clog.speed||'', clog.duration ? clog.duration+'min' : '']);
+        }
+        for (var ei = 0; ei < dd.exercises.length; ei++) {
+          var ex = dd.exercises[ei];
+          var log = S.logs[w] && S.logs[w][dd.day] && S.logs[w][dd.day][ex.id];
+          if (!log || !log.sets.length) continue;
+          for (var si = 0; si < log.sets.length; si++) {
+            var s = log.sets[si];
+            rows.push([w, dd.name, ex.name, ex.type, si+1, s.w||'', s.r||'', s.done?'Yes':'No']);
+          }
+        }
+        continue;
+      }
       if (dd.rest) continue;
       for (var ei = 0; ei < dd.exercises.length; ei++) {
         var ex = dd.exercises[ei];
@@ -1045,12 +1159,17 @@ function setProgView(v) {
 }
 function getAllExercises() {
   var items = [];
+  var seen = {};
   for (var di = 0; di < S.program.length; di++) {
     var dd = S.program[di];
-    if (dd.rest) continue;
+    if (dd.rest && dd.restLabel !== 'Cardio') continue;
     for (var ei = 0; ei < dd.exercises.length; ei++) {
       var ex = dd.exercises[ei];
-      if (ex.name) items.push({id:ex.id, label:ex.name+(ex.v?' ('+ex.v+')':''), day:dd.day});
+      if (!ex.name) continue;
+      var key = ex.name + (ex.v ? ' '+ex.v : '');
+      if (seen[key]) continue;
+      seen[key] = true;
+      items.push({id:ex.id, label:ex.name+(ex.v?' ('+ex.v+')':''), day:dd.day, type:ex.type});
     }
   }
   return items;
@@ -1079,33 +1198,47 @@ function renderProgress() {
   for (var i = 0; i < items.length; i++) {
     pickerHtml += '<button class="prog-ex-btn'+(progExId===items[i].id?' active':'')+'" onclick="selectProgEx(\''+items[i].id+'\')">'+items[i].label+'</button>';
   }
-  document.getElementById('progExPicker').innerHTML = pickerHtml;
   document.getElementById('progGraphPicker').innerHTML = pickerHtml;
   if (progView === 'log') renderProgLog(items);
   else renderProgGraph(items);
 }
+
 function selectProgEx(id) { progExId = id; renderProgress(); }
+
 function renderProgLog(items) {
-  var item = null;
-  for (var i = 0; i < items.length; i++) { if (items[i].id===progExId) { item=items[i]; break; } }
-  if (!item) { document.getElementById('progLogContent').innerHTML=''; return; }
-  var data = getExerciseData(item.id, item.day);
-  var filled = [];
-  for (var i = 0; i < data.length; i++) { if (data[i].w!==null) filled.push(data[i]); }
-  var html = '';
-  if (!filled.length) {
-    html = '<div style="color:var(--muted);font-size:.82rem;padding:20px 0">No data logged yet</div>';
-  } else {
-    for (var i = filled.length-1; i >= 0; i--) {
-      var prev = i < filled.length-1 ? filled[i+1] : null;
-      var delta = prev ? Math.round((filled[i].w-prev.w)*10)/10 : null;
-      var dh = delta!==null ? '<span class="delta '+(delta>0?'up':delta<0?'dn':'eq')+'">'+(delta>0?'+':'')+delta+'kg</span>' : '';
-      html += '<div class="prog-entry"><div><div class="pe-wk">Week '+filled[i].week+'</div>'
-        + '<div class="pe-val">'+filled[i].w+' kg</div>'
-        + (filled[i].r ? '<div class="pe-reps">'+filled[i].r+' rep'+(filled[i].r!=1?'s':'')+'</div>' : '')
-        + '</div>'+dh+'</div>';
-    }
+  if (!items.length) {
+    document.getElementById('progLogContent').innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:20px 0">No exercises in program</div>';
+    return;
   }
+  var html = '<div class="maxes-board">';
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var data = getExerciseData(item.id, item.day);
+    // Find all-time best across all weeks
+    var bestW = null, bestR = null;
+    for (var j = 0; j < data.length; j++) {
+      if (data[j].w !== null) {
+        if (bestW === null || data[j].w > bestW || (data[j].w === bestW && data[j].r > bestR)) {
+          bestW = data[j].w; bestR = data[j].r;
+        }
+      }
+    }
+    var dayName = 'Day ' + item.day;
+    html += '<div class="max-row'+(bestW!==null?' has-data':'')+'" onclick="selectProgEx(\''+item.id+'\');setProgView(\'graph\')">';
+    html += '<div class="max-row-left">';
+    html += '<div class="max-row-name">'+item.label+'</div>';
+    html += '<div class="max-row-day">'+dayName+' &middot; '+item.type+'</div>';
+    html += '</div>';
+    html += '<div class="max-row-right">';
+    if (bestW !== null) {
+      html += '<div class="max-row-weight">'+bestW+' <span style="font-size:.9rem">kg</span></div>';
+      html += '<div class="max-row-reps">'+(bestR ? bestR+' rep'+(bestR!=1?'s':'') : '')+'</div>';
+    } else {
+      html += '<div class="max-row-empty">No data</div>';
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
   document.getElementById('progLogContent').innerHTML = html;
 }
 function renderProgGraph(items) {
@@ -1142,8 +1275,9 @@ function renderProgGraph(items) {
   for (var i=filled.length-1;i>=0;i--) {
     var prev=i<filled.length-1?filled[i+1]:null;
     var delta=prev?Math.round((filled[i].val-prev.val)*10)/10:null;
-    var dh=delta!==null?'<span class="delta '+(delta>0?'up':delta<0?'dn':'eq')+'">'+(delta>0?'+':'')+delta+'kg</span>':'';
-    logHtml+='<div class="prog-entry"><div><div class="pe-wk">Week '+filled[i].week+'</div><div class="pe-val">'+filled[i].val+' kg</div></div>'+dh+'</div>';
+    var pUnit = 'kg';
+    var dh=delta!==null?'<span class="delta '+(delta>0?'up':delta<0?'dn':'eq')+'">'+(delta>0?'+':'')+delta+pUnit+'</span>':'';
+    logHtml+='<div class="prog-entry"><div><div class="pe-wk">Week '+filled[i].week+'</div><div class="pe-val">'+filled[i].val+' '+pUnit+'</div></div>'+dh+'</div>';
   }
   document.getElementById('progGraphLog').innerHTML = logHtml;
 }
@@ -1166,8 +1300,9 @@ function renderEditList() {
     if (S.program[i].day === S.editDay) { dayData = S.program[i]; break; }
   }
   var list = document.getElementById('editList');
-  if (!dayData || dayData.rest) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:10px 0">Rest/Cardio day</div>';
+  if (!dayData) { list.innerHTML = ''; return; }
+  if (dayData.rest && dayData.restLabel !== 'Cardio') {
+    list.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:10px 0">Rest day — no exercises.</div>';
     return;
   }
   var html = '';
@@ -1200,6 +1335,15 @@ function updEx(dayNum, exId, field, val) {
   }
 }
 function delEx(dayNum, exId) {
+  var exName = '';
+  for (var i = 0; i < S.program.length; i++) {
+    if (S.program[i].day === dayNum) {
+      for (var j = 0; j < S.program[i].exercises.length; j++) {
+        if (S.program[i].exercises[j].id === exId) { exName = S.program[i].exercises[j].name; break; }
+      }
+    }
+  }
+  if (!confirm('Delete "' + exName + '"? This cannot be undone.')) return;
   for (var i = 0; i < S.program.length; i++) {
     if (S.program[i].day === dayNum) {
       S.program[i].exercises = S.program[i].exercises.filter(function(e) { return e.id !== exId; });
@@ -1213,7 +1357,8 @@ function addExercise() {
   for (var i = 0; i < S.program.length; i++) {
     if (S.program[i].day === S.editDay) { dayData = S.program[i]; break; }
   }
-  if (!dayData || dayData.rest) return;
+  if (!dayData) return;
+  if (dayData.rest && dayData.restLabel !== 'Cardio') return;
   dayData.exercises.push({id:'d'+S.editDay+'e'+Date.now(), name:'', v:'', type:'accessory'});
   save(); renderEditList();
 }
