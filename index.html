@@ -17,6 +17,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .view{display:none}.view.active{display:block}
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:999px;font-size:.82rem;font-weight:600;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#offlineBanner{display:none;background:var(--red);color:#fff;text-align:center;font-size:.72rem;font-weight:600;padding:5px;letter-spacing:.5px}
+#offlineBanner.show{display:block}
 .confetti-piece{position:fixed;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:998;animation:confettiFall 1.2s ease-in forwards}
 @keyframes confettiFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
 .swipe-wrap{position:relative;overflow:hidden}
@@ -155,7 +157,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .prog-entry{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
 .pe-wk{font-size:.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
 .pe-val{font-family:'Bebas Neue',sans-serif;font-size:1.3rem}
-.pe-reps{font-size:.72rem;color:var(--sub);margin-top:1px}
 .delta{font-size:.75rem;font-weight:600}
 .delta.up{color:var(--green)}.delta.dn{color:var(--red)}.delta.eq{color:var(--muted)}
 #editView{padding-bottom:80px}
@@ -206,6 +207,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 </style>
 </head>
 <body>
+<div id="offlineBanner">&#9888; Offline — changes saved locally</div>
 <div id="toast"></div>
 
 <!-- TRAIN VIEW -->
@@ -218,6 +220,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <button class="hdr-btn" onclick="openView('progressView')">&#128200; Progress</button>
         <button class="hdr-btn" onclick="openView('editView')">&#9998; Edit</button>
       </div>
+      <span id="syncStatus" style="font-size:.6rem;letter-spacing:.5px;transition:color .3s"></span>
     </div>
   </div>
   <div class="countdown-strip" id="countdown"></div>
@@ -280,14 +283,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <div class="edit-inner">
     <div class="edit-head">
       <h2>Edit program</h2>
-      <p>Changes apply across all weeks. Block 1 (3wk) + Block 2 (4wk) + Block 3 (4wk) + Deload</p>
+      <p id="editDesc">Changes apply from current week onwards. Previous weeks unchanged.</p>
     </div>
     <div class="edit-day-picker" id="editDayPicker"></div>
     <div class="edit-list" id="editList"></div>
     <button class="add-ex-btn" onclick="addExercise()">+ Add exercise</button>
   </div>
   <div class="data-section">
-    <h4>Data</h4>
+    <h4>Cross-device sync</h4>
+    <div class="data-note">Your data syncs automatically across all devices via the cloud. Export is available as a backup.</div>
     <div class="data-btns">
       <button class="data-btn" onclick="exportData()">Export JSON</button>
       <button class="data-btn" onclick="document.getElementById('importFile').click()">Import JSON</button>
@@ -321,103 +325,73 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 <script>
 // ══════════════════════════════════════════════════════════════
-// MEET PREP — Block 1 (3wk) → Block 2 (4wk) → Block 3 (4wk) → Deload
-// Meet: June 27, 2026
-// Current e1RMs: SQ 180 / BP 115 / DL 230
-// Meet targets: SQ 190 / BP 130 / DL 240
-// Openers: SQ 170 / BP 110 / DL 220
+// MEET PREP v2 — Supabase sync + forward-only edits
 // ══════════════════════════════════════════════════════════════
 
-var TOTAL_WEEKS = 12; // 3 + 4 + 4 + 1 deload
+var TOTAL_WEEKS = 12;
 var MEET_DATE = new Date('2026-06-27');
-
-// Block structure
 var BLOCKS = [
-  {num:1, start:1, end:3, len:3, label:'Block 1'},
-  {num:2, start:4, end:7, len:4, label:'Block 2'},
-  {num:3, start:8, end:11, len:4, label:'Block 3'},
-  {num:4, start:12, end:12, len:1, label:'Deload'}
+  {num:1,start:1,end:3,len:3,label:'Block 1'},
+  {num:2,start:4,end:7,len:4,label:'Block 2'},
+  {num:3,start:8,end:11,len:4,label:'Block 3'},
+  {num:4,start:12,end:12,len:1,label:'Deload'}
 ];
 
-function getBlock(week) {
-  for (var i = 0; i < BLOCKS.length; i++) {
-    if (week >= BLOCKS[i].start && week <= BLOCKS[i].end) return BLOCKS[i];
-  }
-  return BLOCKS[3];
+function getBlock(w){for(var i=0;i<BLOCKS.length;i++){if(w>=BLOCKS[i].start&&w<=BLOCKS[i].end)return BLOCKS[i];}return BLOCKS[3];}
+function getBlockWeek(w){var b=getBlock(w);return w-b.start+1;}
+
+// RPE waves
+function getPrimaryRPE(w){
+  if(w===12)return{range:'5-6',val:5.5,desc:'Deload — light singles only'};
+  var b=getBlock(w),bw=getBlockWeek(w);
+  var w3=[{r:'5-6',v:5.5},{r:'7-8',v:7.5},{r:'8-9',v:8.5}];
+  var w4=[{r:'5-6',v:5.5},{r:'6-7',v:6.5},{r:'7-8',v:7.5},{r:'8-9',v:8.5}];
+  var rpe=b.len===3?w3[bw-1]:w4[bw-1];
+  var d3=['Leave 4-5 in the tank','Push the weight, 2-3 left','Peak week — RPE 9 max, no grinding'];
+  var d4=['Leave 4-5 in the tank','Building, 3-4 left','Push the weight, 2-3 left','Peak week — RPE 9 max, no grinding'];
+  return{range:rpe.r,val:rpe.v,desc:b.len===3?d3[bw-1]:d4[bw-1],isPeak:bw===b.len};
 }
-function getBlockWeek(week) {
-  var b = getBlock(week);
-  return week - b.start + 1;
+function getSecondaryRPE(w){
+  if(w===12)return{range:'—',val:0,desc:'Deload'};
+  var b=getBlock(w),bw=getBlockWeek(w);
+  var w3=[{r:'5-6',v:5.5},{r:'6-7',v:6.5},{r:'7-8',v:7.5}];
+  var w4=[{r:'5-6',v:5.5},{r:'6',v:6},{r:'6-7',v:6.5},{r:'7-8',v:7.5}];
+  return{range:(b.len===3?w3[bw-1]:w4[bw-1]).r,val:(b.len===3?w3[bw-1]:w4[bw-1]).v,desc:'Secondary — always below primary'};
+}
+function getTertiaryRPE(w){
+  if(w===12)return{range:'—',val:0,desc:'Deload'};
+  var b=getBlock(w),bw=getBlockWeek(w);
+  var w3=[{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'6-7',v:6.5}];
+  var w4=[{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'6-7',v:6.5}];
+  return{range:(b.len===3?w3[bw-1]:w4[bw-1]).r,val:(b.len===3?w3[bw-1]:w4[bw-1]).v,desc:'Tertiary — skill practice only'};
+}
+function getVariationRPE(w){
+  if(w===12)return{range:'—',val:0,desc:'Deload'};
+  var b=getBlock(w),bw=getBlockWeek(w);
+  var w3=[{r:'6',v:6},{r:'7',v:7},{r:'8',v:8}];
+  var w4=[{r:'6',v:6},{r:'6-7',v:6.5},{r:'7',v:7},{r:'8',v:8}];
+  return{range:(b.len===3?w3[bw-1]:w4[bw-1]).r,val:(b.len===3?w3[bw-1]:w4[bw-1]).v,desc:'Variation — ascending RPE'};
 }
 
-// RPE waves — scale to block length
-// Primary: ramps from 5-6 to 8-9
-// Secondary: ramps from 5-6 to 7-8
-// Tertiary: mostly flat 5-6, last week 6-7
-function getPrimaryRPE(week) {
-  if (week === 12) return {range:'5-6', val:5.5, desc:'Deload — light singles only'};
-  var b = getBlock(week), bw = getBlockWeek(week);
-  var waves3 = [{r:'5-6',v:5.5},{r:'7-8',v:7.5},{r:'8-9',v:8.5}];
-  var waves4 = [{r:'5-6',v:5.5},{r:'6-7',v:6.5},{r:'7-8',v:7.5},{r:'8-9',v:8.5}];
-  var w = b.len === 3 ? waves3[bw-1] : waves4[bw-1];
-  var isPeak = bw === b.len;
-  var descs3 = ['Leave 4-5 in the tank','Push the weight, 2-3 left','Peak week — RPE 9 max, no grinding'];
-  var descs4 = ['Leave 4-5 in the tank','Building, 3-4 left','Push the weight, 2-3 left','Peak week — RPE 9 max, no grinding'];
-  var desc = b.len === 3 ? descs3[bw-1] : descs4[bw-1];
-  return {range:w.r, val:w.v, desc:desc, isPeak:isPeak};
-}
-function getSecondaryRPE(week) {
-  if (week === 12) return {range:'—', val:0, desc:'Deload — skip or very light'};
-  var b = getBlock(week), bw = getBlockWeek(week);
-  var waves3 = [{r:'5-6',v:5.5},{r:'6-7',v:6.5},{r:'7-8',v:7.5}];
-  var waves4 = [{r:'5-6',v:5.5},{r:'6',v:6},{r:'6-7',v:6.5},{r:'7-8',v:7.5}];
-  var w = b.len === 3 ? waves3[bw-1] : waves4[bw-1];
-  return {range:w.r, val:w.v, desc:'Secondary — always below primary'};
-}
-function getTertiaryRPE(week) {
-  if (week === 12) return {range:'—', val:0, desc:'Deload — skip'};
-  var b = getBlock(week), bw = getBlockWeek(week);
-  var waves3 = [{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'6-7',v:6.5}];
-  var waves4 = [{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'5-6',v:5.5},{r:'6-7',v:6.5}];
-  var w = b.len === 3 ? waves3[bw-1] : waves4[bw-1];
-  return {range:w.r, val:w.v, desc:'Tertiary — skill practice only'};
-}
-function getVariationRPE(week) {
-  if (week === 12) return {range:'—', val:0, desc:'Deload'};
-  var b = getBlock(week), bw = getBlockWeek(week);
-  var waves3 = [{r:'6',v:6},{r:'7',v:7},{r:'8',v:8}];
-  var waves4 = [{r:'6',v:6},{r:'6-7',v:6.5},{r:'7',v:7},{r:'8',v:8}];
-  var w = b.len === 3 ? waves3[bw-1] : waves4[bw-1];
-  return {range:w.r, val:w.v, desc:'Variation — ascending RPE, fixed reps'};
-}
-
-// ── SUGGESTED WEIGHTS ──
-// These are guidance only. RPE is the real target.
-// Computed from the periodization table we agreed on.
+// Suggested weights
 var SUGGESTED = {
-  // [week] → {exerciseId: 'weight × reps'}
-  // Block 1: weeks 1-3
-  // Block 2: weeks 4-7
-  // Block 3: weeks 8-11
-  // Week 12: deload
-  d1e1: {1:'140×3',2:'152.5×2',3:'162.5×1',4:'145×3',5:'155×2',6:'162.5×2',7:'172.5×1',8:'150×3',9:'160×2',10:'170×2',11:'182.5×1',12:'120×5'},
-  d1e2: {1:'115×5',2:'115×5',3:'115×5',4:'117.5×5',5:'117.5×5',6:'117.5×5',7:'117.5×5',8:'120×5',9:'120×5',10:'120×5',11:'120×5',12:'120×5'},
-  d1e3: {1:'95×1',2:'102.5×1',3:'107.5×1',4:'97.5×1',5:'102.5×1',6:'107.5×1',7:'112.5×1',8:'102.5×1',9:'107.5×1',10:'115×1',11:'122.5×1',12:'80×5'},
-  d1e4: {1:'80×5',2:'80×5',3:'80×5',4:'80×5',5:'80×5',6:'80×5',7:'80×5',8:'82.5×5',9:'82.5×5',10:'82.5×5',11:'82.5×5',12:'82.5×5'},
-  d2e1: {1:'120×5',2:'130×5',3:'140×5',4:'125×5',5:'132.5×5',6:'137.5×5',7:'145×5',8:'130×5',9:'137.5×5',10:'142.5×5',11:'150×5',12:'100×6'},
+  d1e1:{1:'140×3',2:'152.5×2',3:'162.5×1',4:'145×3',5:'155×2',6:'162.5×2',7:'172.5×1',8:'150×3',9:'160×2',10:'170×2',11:'182.5×1',12:'120×5'},
+  d1e2:{1:'115×5',2:'115×5',3:'115×5',4:'117.5×5',5:'117.5×5',6:'117.5×5',7:'117.5×5',8:'120×5',9:'120×5',10:'120×5',11:'120×5',12:'120×5'},
+  d1e3:{1:'95×1',2:'102.5×1',3:'107.5×1',4:'97.5×1',5:'102.5×1',6:'107.5×1',7:'112.5×1',8:'102.5×1',9:'107.5×1',10:'115×1',11:'122.5×1',12:'80×5'},
+  d1e4:{1:'80×5',2:'80×5',3:'80×5',4:'80×5',5:'80×5',6:'80×5',7:'80×5',8:'82.5×5',9:'82.5×5',10:'82.5×5',11:'82.5×5',12:'82.5×5'},
+  d2e1:{1:'120×5',2:'130×5',3:'140×5',4:'125×5',5:'132.5×5',6:'137.5×5',7:'145×5',8:'130×5',9:'137.5×5',10:'142.5×5',11:'150×5',12:'100×6'},
   d2e1b:{1:'95×6',2:'95×6',3:'95×6',4:'97.5×6',5:'97.5×6',6:'97.5×6',7:'97.5×6',8:'100×6',9:'100×6',10:'100×6',11:'100×6',12:'100×6'},
-  d4e1: {1:'120×3',2:'127.5×2-3',3:'135×2',4:'125×3',5:'130×3',6:'137.5×2-3',7:'145×2',8:'130×3',9:'135×3',10:'142.5×2-3',11:'150×2',12:'—'},
-  d4e2: {1:'100×3',2:'100×3',3:'100×3',4:'102.5×3',5:'102.5×3',6:'102.5×3',7:'102.5×3',8:'105×3',9:'105×3',10:'105×3',11:'105×3',12:'—'},
-  d6e1: {1:'185×2-3',2:'200×2',3:'212.5×1',4:'190×2-3',5:'200×2',6:'210×2',7:'222.5×1',8:'195×2-3',9:'207.5×2',10:'217.5×2',11:'230×1',12:'140×4'},
-  d6e2: {1:'140×4',2:'140×4',3:'140×4',4:'142.5×4',5:'142.5×4',6:'142.5×4',7:'142.5×4',8:'145×4',9:'145×4',10:'145×4',11:'145×4',12:'140×4'},
-  d6e3: {1:'80×1',2:'80×1',3:'85×1',4:'82.5×1',5:'82.5×1',6:'87.5×1',7:'87.5×1',8:'85×1',9:'85×1',10:'90×1',11:'90×1',12:'—'},
+  d4e1:{1:'120×3',2:'127.5×2-3',3:'135×2',4:'125×3',5:'130×3',6:'137.5×2-3',7:'145×2',8:'130×3',9:'135×3',10:'142.5×2-3',11:'150×2',12:'—'},
+  d4e2:{1:'100×3',2:'100×3',3:'100×3',4:'102.5×3',5:'102.5×3',6:'102.5×3',7:'102.5×3',8:'105×3',9:'105×3',10:'105×3',11:'105×3',12:'—'},
+  d6e1:{1:'185×2-3',2:'200×2',3:'212.5×1',4:'190×2-3',5:'200×2',6:'210×2',7:'222.5×1',8:'195×2-3',9:'207.5×2',10:'217.5×2',11:'230×1',12:'140×4'},
+  d6e2:{1:'140×4',2:'140×4',3:'140×4',4:'142.5×4',5:'142.5×4',6:'142.5×4',7:'142.5×4',8:'145×4',9:'145×4',10:'145×4',11:'145×4',12:'140×4'},
+  d6e3:{1:'80×1',2:'80×1',3:'85×1',4:'82.5×1',5:'82.5×1',6:'87.5×1',7:'87.5×1',8:'85×1',9:'85×1',10:'90×1',11:'90×1',12:'—'},
 };
 
-// Meet day attempt plan
-var MEET_ATTEMPTS = {squat:[170,180,190], bench:[110,120,130], deadlift:[220,230,240]};
+var MEET_ATTEMPTS={squat:[170,180,190],bench:[110,120,130],deadlift:[220,230,240]};
 
 var DEFAULT_PROGRAM = [
-  {day:1, name:'Mon', rest:false, exercises:[
+  {day:1,name:'Mon',rest:false,exercises:[
     {id:'d1e1',name:'High Bar Squat',v:'Top set',type:'main'},
     {id:'d1e2',name:'High Bar Squat',v:'Back-off — 4×5 · fixed from W1 of block',type:'backoff'},
     {id:'d1e3',name:'Bench Press',v:'Top single',type:'main'},
@@ -427,7 +401,7 @@ var DEFAULT_PROGRAM = [
     {id:'d1e8',name:'Rear Delt Raise',v:'3×10-12 · RPE 9',type:'accessory'},
     {id:'d1e9',name:'Lateral Raise',v:'3×10-12 · RPE 9',type:'accessory'}
   ]},
-  {day:2, name:'Tue', rest:false, exercises:[
+  {day:2,name:'Tue',rest:false,exercises:[
     {id:'d2e1',name:'RDL',v:'Top set — fixed reps, ascending RPE',type:'variation'},
     {id:'d2e1b',name:'RDL',v:'Back-off — 2×6 · fixed from W1 of block',type:'backoff'},
     {id:'d2e2',name:'Nordic Curl',v:'2-3 sets · log degrees · RPE 8-9',type:'accessory'},
@@ -438,8 +412,8 @@ var DEFAULT_PROGRAM = [
     {id:'d2e10',name:'Narrow Grip Row',v:'3×6-8 · pull to hip · RPE 8-9',type:'accessory'},
     {id:'d2e7',name:'Core / Abs',v:'3×10-15 · RPE 8-9',type:'accessory'}
   ]},
-  {day:3, name:'Wed', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[]},
-  {day:4, name:'Thu', rest:false, exercises:[
+  {day:3,name:'Wed',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:4,name:'Thu',rest:false,exercises:[
     {id:'d4e1',name:'Pause HB Squat',v:'Top set — 2-3s pause at bottom',type:'secondary'},
     {id:'d4e2',name:'Pause HB Squat',v:'Back-off — 3×3 · fixed from W1 · maintain pause',type:'backoff'},
     {id:'d4e3',name:'Technique Bench',v:'5×10-12 · low intensity · drill lockout & bar path · RPE 5-6 all weeks',type:'variation'},
@@ -450,8 +424,8 @@ var DEFAULT_PROGRAM = [
     {id:'d4e8',name:'Leg Extension',v:'2×8-12 · RPE 9',type:'accessory'},
     {id:'d4e9',name:'Leg Press',v:'3×8-10 · RPE 8-9',type:'accessory'}
   ]},
-  {day:5, name:'Fri', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[]},
-  {day:6, name:'Sat', rest:false, exercises:[
+  {day:5,name:'Fri',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:6,name:'Sat',rest:false,exercises:[
     {id:'d6e1',name:'Sumo Deadlift',v:'Top set',type:'main'},
     {id:'d6e2',name:'Sumo Deadlift',v:'Back-off — 3×4 · ~60% · fixed from W1',type:'backoff'},
     {id:'d6e3',name:'Bench Press',v:'Tertiary single — always well below Mon',type:'secondary'},
@@ -462,64 +436,205 @@ var DEFAULT_PROGRAM = [
     {id:'d6e7',name:'Ring Curl',v:'3×8-10 · RPE 9',type:'accessory'},
     {id:'d6e8',name:'Pelican Curl',v:'3×8-10 · RPE 9',type:'accessory'}
   ]},
-  {day:7, name:'Sun', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[]}
+  {day:7,name:'Sun',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]}
 ];
 
-// Deload week program override
 var DELOAD_PROGRAM = [
-  {day:1, name:'Mon', rest:false, deloadNote:'Back-offs only — no top sets. Light accessories optional.', exercises:[
+  {day:1,name:'Mon',rest:false,deloadNote:'Back-offs only — no top sets.',exercises:[
     {id:'d1e2',name:'High Bar Squat',v:'Back-off only — 4×5 @ 120kg',type:'backoff'},
     {id:'d1e4',name:'Bench Press',v:'Back-off only — 4×5 @ 82.5kg',type:'backoff'}
   ]},
-  {day:2, name:'Tue', rest:false, deloadNote:'RDL back-offs only. Skip if fatigued.', exercises:[
+  {day:2,name:'Tue',rest:false,deloadNote:'RDL back-offs only. Skip if fatigued.',exercises:[
     {id:'d2e1b',name:'RDL',v:'Back-off only — 2×6 @ 100kg',type:'backoff'}
   ]},
-  {day:3, name:'Wed', rest:true, restLabel:'Rest', restEmoji:'&#128564;', exercises:[]},
-  {day:4, name:'Thu', rest:false, deloadNote:'Opener rehearsal — easy singles, leave immediately.', exercises:[
+  {day:3,name:'Wed',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:4,name:'Thu',rest:false,deloadNote:'Opener rehearsal — easy singles, leave immediately.',exercises:[
     {id:'dl_sq',name:'Squat Opener',v:'170×1 — RPE 7 max',type:'main'},
     {id:'dl_bp',name:'Bench Opener',v:'110×1 — RPE 7 max',type:'main'},
     {id:'dl_dl',name:'Deadlift Opener',v:'220×1 — RPE 7 max',type:'main'}
   ]},
-  {day:5, name:'Fri', rest:true, restLabel:'Rest', restEmoji:'&#128161;', exercises:[]},
-  {day:6, name:'Sat', rest:true, restLabel:'MEET DAY', restEmoji:'&#127942;', meetDay:true, exercises:[]},
-  {day:7, name:'Sun', rest:true, restLabel:'Celebrate', restEmoji:'&#127881;', exercises:[]}
+  {day:5,name:'Fri',rest:true,restLabel:'Rest',restEmoji:'&#128161;',exercises:[]},
+  {day:6,name:'Sat',rest:true,restLabel:'MEET DAY',restEmoji:'&#127942;',meetDay:true,exercises:[]},
+  {day:7,name:'Sun',rest:true,restLabel:'Celebrate',restEmoji:'&#127881;',exercises:[]}
 ];
 
-// State
+// ══════════════════════════════════════════════════════════════
+// STATE — programSnapshots stores per-week program overrides
+// Edit in week N → snapshot saved at key N → weeks N-12 see it
+// ══════════════════════════════════════════════════════════════
 var S = {
-  maxes:{squat:180, deadlift:230, bench:115},
-  program:JSON.parse(JSON.stringify(DEFAULT_PROGRAM)),
+  maxes:{squat:180,deadlift:230,bench:115},
+  programSnapshots:{},  // {weekNum: programArray} — forward-only edits
   logs:{},
   doneDays:{},
   week:1,
   day:1,
   editDay:1,
-  progLift:'High Bar Squat'
+  progLift:'High Bar Squat',
+  programVersion:'v6'
 };
 
-// ── STORAGE ──
-function save() {
-  try { localStorage.setItem('meetprep2026', JSON.stringify(S)); } catch(e) {}
-}
-function load() {
-  try {
-    var d = localStorage.getItem('meetprep2026');
-    if (d) {
-      var parsed = JSON.parse(d);
-      S.maxes = parsed.maxes || S.maxes;
-      S.logs = parsed.logs || {};
-      S.doneDays = parsed.doneDays || {};
-      S.week = parsed.week || 1;
-      S.day = parsed.day || 1;
-      S.editDay = parsed.editDay || 1;
-      S.progLift = parsed.progLift || 'High Bar Squat';
-      if (parsed.program) S.program = parsed.program;
-      else S.program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
-    }
-  } catch(e) {}
+// Get effective program for any week
+function getProgramForWeek(w) {
+  if (w === 12) return DELOAD_PROGRAM;
+  // Find highest snapshot key <= w
+  var bestKey = null;
+  for (var k in S.programSnapshots) {
+    var kn = parseInt(k);
+    if (kn <= w && (bestKey === null || kn > bestKey)) bestKey = kn;
+  }
+  if (bestKey !== null) return JSON.parse(JSON.stringify(S.programSnapshots[bestKey]));
+  return JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
 }
 
-// ── HELPERS ──
+// Get the *mutable* program for editing at current week
+// This returns the actual snapshot (or creates one)
+function getEditableProgram() {
+  var w = S.week;
+  if (w === 12) return null; // can't edit deload
+  var key = String(w);
+  if (!S.programSnapshots[key]) {
+    // Create snapshot from effective program at this week
+    S.programSnapshots[key] = JSON.parse(JSON.stringify(getProgramForWeek(w)));
+  }
+  return S.programSnapshots[key];
+}
+
+function getCurrentProgram() {
+  return getProgramForWeek(S.week);
+}
+
+function getSuggested(exId, week) {
+  if (SUGGESTED[exId] && SUGGESTED[exId][week]) return SUGGESTED[exId][week];
+  return null;
+}
+
+function getRPEForExercise(exId, type, week) {
+  if (type === 'main') return getPrimaryRPE(week);
+  if (type === 'secondary') {
+    if (exId === 'd6e3') return getTertiaryRPE(week);
+    return getSecondaryRPE(week);
+  }
+  if (type === 'variation') return getVariationRPE(week);
+  if (type === 'backoff') return {range:'Fixed',val:0,desc:'Weight set in W1 of block — do not change'};
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════
+// SUPABASE SYNC
+// ══════════════════════════════════════════════════════════════
+var SUPA_URL = 'https://pjurohuntyehfkbwbwtv.supabase.co';
+var SUPA_KEY = 'sb_publishable_iN5U1qtuEy08G7ZI4H-6sw_gXqFhT3g';
+var syncTimeout = null;
+
+function setSyncStatus(status) {
+  var el = document.getElementById('syncStatus');
+  if (!el) return;
+  if (status === 'saving') { el.textContent = '⟳ Saving...'; el.style.color = 'var(--muted)'; }
+  else if (status === 'saved') { el.textContent = '✓ Synced'; el.style.color = 'var(--green)'; }
+  else if (status === 'error') { el.textContent = '⚠ Offline — saved locally'; el.style.color = 'var(--red)'; }
+  else { el.textContent = ''; }
+}
+
+function updateOnlineStatus() {
+  var b = document.getElementById('offlineBanner');
+  if (navigator.onLine) b.classList.remove('show'); else b.classList.add('show');
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
+function save() {
+  S.programVersion = 'v6';
+  try { localStorage.setItem('meetprep2026', JSON.stringify(S)); } catch(e) {}
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(function() { pushToSupabase(); }, 800);
+}
+
+function pushToSupabase() {
+  setSyncStatus('saving');
+  var body = JSON.stringify({ id: 'meetprep', data: S, updated_at: new Date().toISOString() });
+  // Upsert: inserts if new, updates if exists
+  fetch(SUPA_URL + '/rest/v1/logs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    },
+    body: body
+  }).then(function(r) {
+    if (r.ok) { setSyncStatus('saved'); setTimeout(function(){ setSyncStatus('idle'); }, 2000); }
+    else { setSyncStatus('error'); }
+  }).catch(function() { setSyncStatus('error'); });
+}
+
+function countLogEntries(logs) {
+  var total = 0;
+  if (!logs) return 0;
+  for (var w in logs) for (var d in logs[w]) for (var ex in logs[w][d]) {
+    var sets = logs[w][d][ex].sets;
+    total += sets ? sets.length : 1;
+  }
+  return total;
+}
+
+function applyData(parsed) {
+  S.maxes = parsed.maxes || S.maxes;
+  S.logs = parsed.logs || {};
+  S.doneDays = parsed.doneDays || {};
+  S.week = parsed.week || 1;
+  S.day = parsed.day || 1;
+  S.editDay = parsed.editDay || 1;
+  S.progLift = parsed.progLift || 'High Bar Squat';
+  // Migrate from old single-program format
+  if (parsed.programSnapshots) {
+    S.programSnapshots = parsed.programSnapshots;
+  } else if (parsed.program) {
+    // Old format had a single program array — treat it as a week-1 snapshot
+    S.programSnapshots = { '1': parsed.program };
+  } else {
+    S.programSnapshots = {};
+  }
+  S.programVersion = 'v6';
+}
+
+function load() {
+  document.getElementById('dayContent').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted);font-size:.85rem">Loading...</div>';
+  setSyncStatus('saving');
+  fetch(SUPA_URL + '/rest/v1/logs?id=eq.meetprep&select=data,updated_at', {
+    headers: {'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY}
+  }).then(function(r) { return r.json(); })
+  .then(function(rows) {
+    var cloudData = (rows && rows.length > 0 && rows[0].data) ? rows[0].data : null;
+    var cloudEntries = cloudData ? countLogEntries(cloudData.logs) : 0;
+    var localData = null;
+    try { var d = localStorage.getItem('meetprep2026'); if (d) localData = JSON.parse(d); } catch(e) {}
+    var localEntries = localData ? countLogEntries(localData.logs) : 0;
+    if (cloudData && cloudEntries >= localEntries) {
+      applyData(cloudData);
+      try { localStorage.setItem('meetprep2026', JSON.stringify(S)); } catch(e) {}
+    } else if (localData) {
+      applyData(localData);
+      pushToSupabase();
+    }
+    setSyncStatus('saved');
+    setTimeout(function(){ setSyncStatus('idle'); }, 1500);
+    renderAll();
+  })
+  .catch(function() {
+    setSyncStatus('error');
+    try {
+      var d = localStorage.getItem('meetprep2026');
+      if (d) applyData(JSON.parse(d));
+    } catch(e) {}
+    renderAll();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════
 function toast(msg, dur) {
   var el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
@@ -540,28 +655,9 @@ function fireConfetti() {
   }
 }
 
-function getCurrentProgram() {
-  if (S.week === 12) return DELOAD_PROGRAM;
-  return S.program;
-}
-
-function getSuggested(exId, week) {
-  if (SUGGESTED[exId] && SUGGESTED[exId][week]) return SUGGESTED[exId][week];
-  return null;
-}
-
-function getRPEForExercise(exId, type, week) {
-  if (type === 'main') return getPrimaryRPE(week);
-  if (type === 'secondary') {
-    if (exId === 'd6e3') return getTertiaryRPE(week);
-    return getSecondaryRPE(week);
-  }
-  if (type === 'variation') return getVariationRPE(week);
-  if (type === 'backoff') return {range:'Fixed',val:0,desc:'Weight set in W1 of block — do not change'};
-  return null;
-}
-
-// ── COUNTDOWN ──
+// ══════════════════════════════════════════════════════════════
+// COUNTDOWN
+// ══════════════════════════════════════════════════════════════
 function renderCountdown() {
   var now = new Date();
   var diff = MEET_DATE - now;
@@ -572,7 +668,9 @@ function renderCountdown() {
   else el.innerHTML = '<strong>' + days + ' days</strong> to meet — Jun 27';
 }
 
-// ── MAXES ──
+// ══════════════════════════════════════════════════════════════
+// MAXES
+// ══════════════════════════════════════════════════════════════
 function renderMaxes() {
   var items = [
     {lbl:'HB Squat',v:S.maxes.squat,t:MEET_ATTEMPTS.squat[2]},
@@ -604,7 +702,9 @@ document.getElementById('maxModal').addEventListener('click', function(e){
   if (e.target===e.currentTarget) closeModal();
 });
 
-// ── WEEK / DAY SELECTORS ──
+// ══════════════════════════════════════════════════════════════
+// WEEK / DAY SELECTORS
+// ══════════════════════════════════════════════════════════════
 function renderWeekBtns() {
   var c = document.getElementById('weekBtns'); c.innerHTML = '';
   for (var w=1;w<=TOTAL_WEEKS;w++) {
@@ -618,7 +718,6 @@ function renderWeekBtns() {
     btn.onclick = (function(wk){return function(){S.week=wk;save();renderAll();};})(w);
     c.appendChild(btn);
   }
-  // Block dividers
   var btns = c.querySelectorAll('.week-btn');
   [2,6].forEach(function(idx){
     if (btns[idx]&&btns[idx+1]) {
@@ -627,21 +726,16 @@ function renderWeekBtns() {
       c.insertBefore(div, btns[idx+1]);
     }
   });
-  // Also after week 11
   btns = c.querySelectorAll('.week-btn');
   if (btns[10]&&btns[11]) {
     var div=document.createElement('span');
     div.style.cssText='width:1px;height:20px;background:rgba(255,77,77,.3);flex-shrink:0;align-self:center;margin:0 2px';
     c.insertBefore(div, btns[11]);
   }
-  // Block labels
-  var lblRow = document.getElementById('blockLabelRow');
-  lblRow.innerHTML = '<span style="width:108px;text-align:center">Block 1 (3wk)</span>'
-    +'<span style="width:6px"></span>'
-    +'<span style="width:144px;text-align:center">Block 2 (4wk)</span>'
-    +'<span style="width:6px"></span>'
-    +'<span style="width:144px;text-align:center">Block 3 (4wk)</span>'
-    +'<span style="width:6px"></span>'
+  document.getElementById('blockLabelRow').innerHTML =
+    '<span style="width:108px;text-align:center">Block 1 (3wk)</span><span style="width:6px"></span>'
+    +'<span style="width:144px;text-align:center">Block 2 (4wk)</span><span style="width:6px"></span>'
+    +'<span style="width:144px;text-align:center">Block 3 (4wk)</span><span style="width:6px"></span>'
     +'<span style="width:36px;text-align:center;color:#ff6b6b">DL</span>';
 }
 
@@ -659,7 +753,9 @@ function renderDayTabs() {
   }
 }
 
-// ── LOG HELPERS ──
+// ══════════════════════════════════════════════════════════════
+// LOG HELPERS
+// ══════════════════════════════════════════════════════════════
 function getLog(w,d,id) {
   if (!S.logs[w]) S.logs[w]={};
   if (!S.logs[w][d]) S.logs[w][d]={};
@@ -667,7 +763,9 @@ function getLog(w,d,id) {
   return S.logs[w][d][id];
 }
 
-// ── DAY CONTENT ──
+// ══════════════════════════════════════════════════════════════
+// DAY CONTENT
+// ══════════════════════════════════════════════════════════════
 function renderDayContent() {
   var prog = getCurrentProgram();
   var dayData = null;
@@ -684,11 +782,9 @@ function renderDayContent() {
         +'<div style="font-size:.85rem;margin-bottom:6px"><strong>Squat:</strong> '+MEET_ATTEMPTS.squat.join(' → ')+' kg</div>'
         +'<div style="font-size:.85rem;margin-bottom:6px"><strong>Bench:</strong> '+MEET_ATTEMPTS.bench.join(' → ')+' kg</div>'
         +'<div style="font-size:.85rem;margin-bottom:6px"><strong>Deadlift:</strong> '+MEET_ATTEMPTS.deadlift.join(' → ')+' kg</div>'
-        +'<div style="font-size:.72rem;color:var(--sub);margin-top:10px">Openers RPE 7 max. Seconds based on warm-up feel. Thirds are the gamble.</div>'
-        +'</div>';
+        +'<div style="font-size:.72rem;color:var(--sub);margin-top:10px">Openers RPE 7 max. Seconds based on warm-up feel.</div></div>';
     }
-    cont.innerHTML = '<div class="rest-screen">'
-      +'<div class="ri">'+(dayData.restEmoji||'&#128564;')+'</div>'
+    cont.innerHTML = '<div class="rest-screen"><div class="ri">'+(dayData.restEmoji||'&#128564;')+'</div>'
       +'<h2>'+(dayData.restLabel||'Rest')+' Day</h2>'
       +'<p>'+(dayData.meetDay?'Go get that total':'Recovery is part of training')+'</p>'
       +meetHtml+'</div>'
@@ -700,89 +796,62 @@ function renderDayContent() {
   if (dayData.deloadNote) {
     html += '<div style="background:rgba(255,77,77,.06);border:1px solid rgba(255,77,77,.2);border-radius:10px;padding:10px 14px;margin:12px 0 0;font-size:.78rem;color:#ff6b6b">'+dayData.deloadNote+'</div>';
   }
-
-  var mainEx=[], accEx=[];
+  var mainEx=[],accEx=[];
   for (var i=0;i<dayData.exercises.length;i++) {
     var ex=dayData.exercises[i];
     if (ex.type==='main'||ex.type==='secondary'||ex.type==='backoff'||ex.type==='variation') mainEx.push(ex);
     else accEx.push(ex);
   }
-  if (mainEx.length) {
-    html += '<div class="section-label">Main lifts</div>';
-    for (var i=0;i<mainEx.length;i++) html += buildExCard(mainEx[i]);
-  }
-  if (accEx.length) {
-    html += '<div class="section-label">Accessories</div>';
-    for (var i=0;i<accEx.length;i++) html += buildExCard(accEx[i]);
-  }
-  html += '<button class="complete-btn'+(isDone?' done':'')+'" onclick="toggleDayDone()">'+(isDone?'&#10003; COMPLETE':'MARK COMPLETE')+'</button>';
-  cont.innerHTML = html;
+  if (mainEx.length) { html+='<div class="section-label">Main lifts</div>'; for(var i=0;i<mainEx.length;i++) html+=buildExCard(mainEx[i]); }
+  if (accEx.length) { html+='<div class="section-label">Accessories</div>'; for(var i=0;i<accEx.length;i++) html+=buildExCard(accEx[i]); }
+  html+='<button class="complete-btn'+(isDone?' done':'')+'" onclick="toggleDayDone()">'+(isDone?'&#10003; COMPLETE':'MARK COMPLETE')+'</button>';
+  cont.innerHTML=html;
   attachListeners();
 }
 
 function buildExCard(ex) {
-  var log = getLog(S.week, S.day, ex.id);
-  var isMain = (ex.type==='main'||ex.type==='secondary'||ex.type==='variation');
-  var allDone = log.sets.length > 0;
-  for (var i=0;i<log.sets.length;i++) { if (!log.sets[i].done) { allDone=false; break; } }
-  var doneCount=0;
-  for (var i=0;i<log.sets.length;i++) { if (log.sets[i].done) doneCount++; }
-  var lastW = (log.sets.length>0&&log.sets[log.sets.length-1].w) ? ' · '+log.sets[log.sets.length-1].w+'kg' : '';
-  var summary = log.sets.length>0 ? (doneCount+'/'+log.sets.length+' sets logged'+lastW) : 'Tap to log sets';
-  var badgeLabel = ex.type==='main'?'Primary':ex.type==='secondary'?'Secondary':ex.type==='backoff'?'Backoff':ex.type==='variation'?'Variation':'Accessory';
-  var badgeCls = (ex.type==='main'||ex.type==='secondary'||ex.type==='variation')?'badge-main':'badge-acc';
-
-  var rpeInfo = getRPEForExercise(ex.id, ex.type, S.week);
-  var rpeBadge='', rpeBar='', suggestedBar='';
-
-  if (rpeInfo && ex.type!=='backoff' && ex.type!=='accessory') {
-    var isPeak = rpeInfo.isPeak;
-    rpeBadge = '<span class="badge-rpe'+(isPeak?' rpe-peak':'')+'">RPE '+rpeInfo.range+'</span>';
-    var b = getBlock(S.week);
-    rpeBar = '<div class="rpe-target-bar'+(isPeak?' rpe-peak-bar':'')+'">'
-      +'<div><div class="rpe-target-label">'+badgeLabel+' · '+b.label+' · W'+getBlockWeek(S.week)+'/'+b.len+'</div>'
-      +'<div class="rpe-target-val"'+(isPeak?' style="color:#ff6b6b"':'')+'>'+rpeInfo.range+'</div></div>'
-      +'<div class="rpe-target-desc">'+rpeInfo.desc+'</div></div>';
+  var log=getLog(S.week,S.day,ex.id);
+  var isMain=(ex.type==='main'||ex.type==='secondary'||ex.type==='variation');
+  var allDone=log.sets.length>0;
+  for(var i=0;i<log.sets.length;i++){if(!log.sets[i].done){allDone=false;break;}}
+  var doneCount=0;for(var i=0;i<log.sets.length;i++){if(log.sets[i].done)doneCount++;}
+  var lastW=(log.sets.length>0&&log.sets[log.sets.length-1].w)?' · '+log.sets[log.sets.length-1].w+'kg':'';
+  var summary=log.sets.length>0?(doneCount+'/'+log.sets.length+' sets logged'+lastW):'Tap to log sets';
+  var badgeLabel=ex.type==='main'?'Primary':ex.type==='secondary'?'Secondary':ex.type==='backoff'?'Backoff':ex.type==='variation'?'Variation':'Accessory';
+  var badgeCls=(ex.type==='main'||ex.type==='secondary'||ex.type==='variation')?'badge-main':'badge-acc';
+  var rpeInfo=getRPEForExercise(ex.id,ex.type,S.week);
+  var rpeBadge='',rpeBar='',suggestedBar='';
+  if(rpeInfo&&ex.type!=='backoff'&&ex.type!=='accessory'){
+    var isPeak=rpeInfo.isPeak;
+    rpeBadge='<span class="badge-rpe'+(isPeak?' rpe-peak':'')+'">RPE '+rpeInfo.range+'</span>';
+    var b=getBlock(S.week);
+    rpeBar='<div class="rpe-target-bar'+(isPeak?' rpe-peak-bar':'')+'"><div><div class="rpe-target-label">'+badgeLabel+' · '+b.label+' · W'+getBlockWeek(S.week)+'/'+b.len+'</div><div class="rpe-target-val"'+(isPeak?' style="color:#ff6b6b"':'')+'>'+rpeInfo.range+'</div></div><div class="rpe-target-desc">'+rpeInfo.desc+'</div></div>';
   }
-  if (ex.type==='backoff') {
-    var b = getBlock(S.week);
-    rpeBar = '<div class="rpe-target-bar"><div><div class="rpe-target-label">Back-off · '+b.label+'</div>'
-      +'<div class="rpe-target-val" style="font-size:.78rem;color:var(--sub)">Fixed weight</div></div>'
-      +'<div class="rpe-target-desc">Set in W1 of block — do not change</div></div>';
+  if(ex.type==='backoff'){
+    var b=getBlock(S.week);
+    rpeBar='<div class="rpe-target-bar"><div><div class="rpe-target-label">Back-off · '+b.label+'</div><div class="rpe-target-val" style="font-size:.78rem;color:var(--sub)">Fixed weight</div></div><div class="rpe-target-desc">Set in W1 of block — do not change</div></div>';
   }
-
-  var sugg = getSuggested(ex.id, S.week);
-  if (sugg && sugg !== '—') {
-    suggestedBar = '<div class="suggested-bar"><div><div class="s-label">Suggested</div>'
-      +'<div class="s-val">'+sugg+' kg</div></div>'
-      +'<div class="s-note">RPE dictates — adjust to feel</div></div>';
+  var sugg=getSuggested(ex.id,S.week);
+  if(sugg&&sugg!=='—'){
+    suggestedBar='<div class="suggested-bar"><div><div class="s-label">Suggested</div><div class="s-val">'+sugg+' kg</div></div><div class="s-note">RPE dictates — adjust to feel</div></div>';
   }
-
   var setRows='';
-  for (var i=0;i<log.sets.length;i++) {
+  for(var i=0;i<log.sets.length;i++){
     var s=log.sets[i];
-    setRows += '<div class="set-row">'
-      +'<span class="set-num">'+(i+1)+'</span>'
+    setRows+='<div class="set-row"><span class="set-num">'+(i+1)+'</span>'
       +'<input class="set-inp" type="number" inputmode="decimal" placeholder="kg" value="'+(s.w||'')+'" data-exid="'+ex.id+'" data-i="'+i+'" data-f="w">'
       +'<input class="set-inp" type="text" placeholder="reps" value="'+(s.r||'')+'" data-exid="'+ex.id+'" data-i="'+i+'" data-f="r">'
       +'<button class="tick-btn'+(s.done?' done':'')+'" onclick="toggleSet(\''+ex.id+'\','+i+')">&#10003;</button>'
-      +'<button class="del-set-btn" onclick="deleteSet(\''+ex.id+'\','+i+')" title="Remove">&#10005;</button>'
-      +'</div>';
+      +'<button class="del-set-btn" onclick="deleteSet(\''+ex.id+'\','+i+')" title="Remove">&#10005;</button></div>';
   }
-
   return '<div class="ex-card'+(isMain?' main-lift':'')+(allDone?' fully-done':'')+'" id="ec_'+ex.id+'">'
     +'<div class="ex-header" onclick="toggleCard(\''+ex.id+'\')">'
     +'<div class="ex-check" onclick="quickCheck(event,\''+ex.id+'\')">'+(allDone?'&#10003;':'')+'</div>'
-    +'<div class="ex-info">'
-    +'<div class="ex-name-row"><span class="ex-name">'+ex.name+'</span>'
+    +'<div class="ex-info"><div class="ex-name-row"><span class="ex-name">'+ex.name+'</span>'
     +(ex.v?'<span class="ex-var">'+ex.v+'</span>':'')
-    +'<span class="ex-badge '+badgeCls+'">'+badgeLabel+'</span>'
-    +rpeBadge+'</div>'
-    +'<div class="ex-summary">'+summary+'</div>'
-    +'</div><span class="ex-chevron">&#9662;</span></div>'
-    +'<div class="ex-body">'
-    +rpeBar
-    +suggestedBar
+    +'<span class="ex-badge '+badgeCls+'">'+badgeLabel+'</span>'+rpeBadge+'</div>'
+    +'<div class="ex-summary">'+summary+'</div></div><span class="ex-chevron">&#9662;</span></div>'
+    +'<div class="ex-body">'+rpeBar+suggestedBar
     +(log.sets.length>0?'<div class="sets-header"><span>#</span><span>kg</span><span>Reps</span><span>&#10003;</span><span></span></div>':'')
     +'<div id="sl_'+ex.id+'">'+setRows+'</div>'
     +'<button class="add-set-btn" onclick="addSet(\''+ex.id+'\')">+ Add set</button>'
@@ -792,30 +861,30 @@ function buildExCard(ex) {
 
 function attachListeners() {
   var inps=document.querySelectorAll('.set-inp');
-  for (var i=0;i<inps.length;i++) {
+  for(var i=0;i<inps.length;i++){
     inps[i].addEventListener('change',function(e){
       var log=getLog(S.week,S.day,e.target.getAttribute('data-exid'));
       var idx=parseInt(e.target.getAttribute('data-i'));
       var field=e.target.getAttribute('data-f');
       if(!log.sets[idx])log.sets[idx]={w:'',r:'',done:false};
       log.sets[idx][field]=e.target.value;
-      save(); refreshSummary(e.target.getAttribute('data-exid'));
+      save();refreshSummary(e.target.getAttribute('data-exid'));
     });
   }
   var tas=document.querySelectorAll('[data-notes]');
-  for (var i=0;i<tas.length;i++) {
+  for(var i=0;i<tas.length;i++){
     tas[i].addEventListener('change',function(e){
-      getLog(S.week,S.day,e.target.getAttribute('data-notes')).notes=e.target.value; save();
+      getLog(S.week,S.day,e.target.getAttribute('data-notes')).notes=e.target.value;save();
     });
   }
 }
 
-function toggleCard(id) { var c=document.getElementById('ec_'+id); if(c)c.classList.toggle('open'); }
-function quickCheck(event,id) {
+function toggleCard(id){var c=document.getElementById('ec_'+id);if(c)c.classList.toggle('open');}
+function quickCheck(event,id){
   event.stopPropagation();
   var log=getLog(S.week,S.day,id);
   var allDone=log.sets.length>0;
-  for (var i=0;i<log.sets.length;i++){if(!log.sets[i].done){allDone=false;break;}}
+  for(var i=0;i<log.sets.length;i++){if(!log.sets[i].done){allDone=false;break;}}
   if(allDone){for(var i=0;i<log.sets.length;i++)log.sets[i].done=false;}
   else if(log.sets.length===0){log.sets.push({w:'',r:'',done:true});}
   else{for(var i=0;i<log.sets.length;i++)log.sets[i].done=true;}
@@ -829,78 +898,62 @@ function addSet(exId){
   log.sets.push({w:last?last.w:'',r:last?last.r:'',done:false});
   save();reRenderCard(exId,true);
 }
-function reRenderCard(exId,keepOpen) {
-  var prog=getCurrentProgram();
-  var dayData=null;
+function reRenderCard(exId,keepOpen){
+  var prog=getCurrentProgram();var dayData=null;
   for(var i=0;i<prog.length;i++){if(prog[i].day===S.day){dayData=prog[i];break;}}
-  if(!dayData)return;
-  var ex=null;
+  if(!dayData)return;var ex=null;
   for(var i=0;i<dayData.exercises.length;i++){if(dayData.exercises[i].id===exId){ex=dayData.exercises[i];break;}}
-  if(!ex)return;
-  var card=document.getElementById('ec_'+exId);if(!card)return;
+  if(!ex)return;var card=document.getElementById('ec_'+exId);if(!card)return;
   var wasOpen=card.classList.contains('open');
-  var tmp=document.createElement('div');
-  tmp.innerHTML=buildExCard(ex);
-  card.parentNode.replaceChild(tmp.firstChild,card);
-  attachListeners();
+  var tmp=document.createElement('div');tmp.innerHTML=buildExCard(ex);
+  card.parentNode.replaceChild(tmp.firstChild,card);attachListeners();
   if(wasOpen||keepOpen){var nc=document.getElementById('ec_'+exId);if(nc)nc.classList.add('open');}
   renderDayTabs();
 }
-function refreshSummary(exId) {
-  var log=getLog(S.week,S.day,exId);
-  var card=document.getElementById('ec_'+exId);if(!card)return;
+function refreshSummary(exId){
+  var log=getLog(S.week,S.day,exId);var card=document.getElementById('ec_'+exId);if(!card)return;
   var el=card.querySelector('.ex-summary');if(!el)return;
   var dc=0;for(var i=0;i<log.sets.length;i++){if(log.sets[i].done)dc++;}
   var lw=(log.sets.length>0&&log.sets[log.sets.length-1].w)?' · '+log.sets[log.sets.length-1].w+'kg':'';
   el.innerHTML=log.sets.length>0?(dc+'/'+log.sets.length+' sets logged'+lw):'Tap to log sets';
 }
-function toggleDayDone() {
-  var k=S.week+'_'+S.day;
-  var wasDone=!!S.doneDays[k];
-  S.doneDays[k]=!wasDone;
-  save();
+function toggleDayDone(){
+  var k=S.week+'_'+S.day;var wasDone=!!S.doneDays[k];S.doneDays[k]=!wasDone;save();
   if(!wasDone){fireConfetti();toast('Day complete! Great work 💪',2500);}
   renderDayTabs();renderDayContent();
 }
 
-// ── SWIPE ──
+// ══════════════════════════════════════════════════════════════
+// SWIPE + SCROLL HIDE
+// ══════════════════════════════════════════════════════════════
 var touchStartX=0,touchStartY=0;
-document.getElementById('swipeWrap').addEventListener('touchstart',function(e){
-  touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;
-},{passive:true});
+document.getElementById('swipeWrap').addEventListener('touchstart',function(e){touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;},{passive:true});
 document.getElementById('swipeWrap').addEventListener('touchend',function(e){
-  var dx=e.changedTouches[0].clientX-touchStartX;
-  var dy=e.changedTouches[0].clientY-touchStartY;
+  var dx=e.changedTouches[0].clientX-touchStartX,dy=e.changedTouches[0].clientY-touchStartY;
   if(Math.abs(dx)<50||Math.abs(dy)>Math.abs(dx))return;
   if(dx<0)navigateDay(1);else navigateDay(-1);
 });
-function navigateDay(dir) {
-  var prog=getCurrentProgram();
-  var idx=-1;
+function navigateDay(dir){
+  var prog=getCurrentProgram();var idx=-1;
   for(var i=0;i<prog.length;i++){if(prog[i].day===S.day){idx=i;break;}}
   var next=idx+dir;
   if(next<0){if(S.week>1){S.week--;next=getCurrentProgram().length-1;}else return;}
   else if(next>=prog.length){if(S.week<TOTAL_WEEKS){S.week++;next=0;}else return;}
   var cont=document.getElementById('dayContent');
   cont.classList.add(dir>0?'slide-left':'slide-right');
-  setTimeout(function(){
-    var p=getCurrentProgram();
-    S.day=p[next].day;save();
+  setTimeout(function(){var p=getCurrentProgram();S.day=p[next].day;save();
     cont.classList.remove('slide-left','slide-right');
     renderWeekBtns();renderDayTabs();renderDayContent();updateSwipeHints();
   },180);
 }
-function updateSwipeHints() {
-  var prog=getCurrentProgram();
-  var idx=-1;
+function updateSwipeHints(){
+  var prog=getCurrentProgram();var idx=-1;
   for(var i=0;i<prog.length;i++){if(prog[i].day===S.day){idx=i;break;}}
   var l=document.getElementById('swipeLeft'),r=document.getElementById('swipeRight');
   if(!l||!r)return;
   l.textContent=idx>0?'\u2190 '+prog[idx-1].name:(S.week>1?'\u2190 Wk'+(S.week-1):'');
   r.textContent=idx<prog.length-1?prog[idx+1].name+' \u2192':(S.week<TOTAL_WEEKS?'Wk'+(S.week+1)+' \u2192':'');
 }
-
-// Hide header/nav on scroll
 var lastScrollY=0;
 window.addEventListener('scroll',function(){
   var cur=window.scrollY;
@@ -910,14 +963,14 @@ window.addEventListener('scroll',function(){
   lastScrollY=cur;
 },{passive:true});
 
-// ── NAVIGATION ──
-function openView(id) {
-  var views=document.querySelectorAll('.view');
-  for(var i=0;i<views.length;i++)views[i].classList.remove('active');
+// ══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════
+function openView(id){
+  var views=document.querySelectorAll('.view');for(var i=0;i<views.length;i++)views[i].classList.remove('active');
   document.getElementById(id).classList.add('active');
   var navMap={mainView:'navMain',tableView:'navTable',progressView:'navProgress',editView:'navEdit'};
-  var navBtns=document.querySelectorAll('.nav-btn');
-  for(var i=0;i<navBtns.length;i++)navBtns[i].classList.remove('active');
+  var navBtns=document.querySelectorAll('.nav-btn');for(var i=0;i<navBtns.length;i++)navBtns[i].classList.remove('active');
   if(navMap[id])document.getElementById(navMap[id]).classList.add('active');
   if(id==='progressView')renderProgress();
   if(id==='editView')renderEditView();
@@ -925,21 +978,23 @@ function openView(id) {
   window.scrollTo(0,0);
 }
 
-// ── TABLE VIEW ──
-function renderTable() {
+// ══════════════════════════════════════════════════════════════
+// TABLE VIEW
+// ══════════════════════════════════════════════════════════════
+function renderTable(){
+  // Use default program for column headers, but show per-week exercises
   var html='<table class="prog-table"><thead><tr><th>Exercise</th><th>Type</th>';
   for(var w=1;w<=TOTAL_WEEKS;w++){
-    var b=getBlock(w),bw=getBlockWeek(w);
-    var isDeload=w===12;
+    var b=getBlock(w),bw=getBlockWeek(w),isDeload=w===12;
     var rpe=getPrimaryRPE(w);
     html+='<th>'+(bw===1?'<span style="font-size:.5rem;color:var(--muted);display:block">'+b.label+'</span>':'')
-      +(isDeload?'DL':'Wk '+w)
-      +'<br><span style="color:'+(rpe.isPeak||isDeload?'#ff6b6b':'var(--accent)')+';font-size:.55rem">RPE '+rpe.range+(rpe.isPeak?' ★':'')+'</span></th>';
+      +(isDeload?'DL':'Wk '+w)+'<br><span style="color:'+(rpe.isPeak||isDeload?'#ff6b6b':'var(--accent)')+';font-size:.55rem">RPE '+rpe.range+(rpe.isPeak?' ★':'')+'</span></th>';
   }
   html+='</tr></thead><tbody>';
-  for(var di=0;di<S.program.length;di++){
-    var dd=S.program[di];
-    if(dd.rest)continue;
+  // Use the union of all exercises across all weeks
+  var baseProg = DEFAULT_PROGRAM;
+  for(var di=0;di<baseProg.length;di++){
+    var dd=baseProg[di];if(dd.rest)continue;
     html+='<tr class="day-head-row"><td colspan="'+(2+TOTAL_WEEKS)+'">'+dd.name+'</td></tr>';
     for(var ei=0;ei<dd.exercises.length;ei++){
       var ex=dd.exercises[ei];
@@ -948,9 +1003,7 @@ function renderTable() {
       for(var w=1;w<=TOTAL_WEEKS;w++){
         var cellId='tc_'+w+'_'+dd.day+'_'+ex.id;
         var sugg=getSuggested(ex.id,w);
-        html+='<td id="'+cellId+'" style="min-width:110px">'
-          +(sugg?'<div class="tbl-suggested">Sugg: '+sugg+'</div>':'')
-          +buildTblCell(w,dd.day,ex.id)+'</td>';
+        html+='<td id="'+cellId+'" style="min-width:110px">'+(sugg?'<div class="tbl-suggested">Sugg: '+sugg+'</div>':'')+buildTblCell(w,dd.day,ex.id)+'</td>';
       }
       html+='</tr>';
     }
@@ -959,19 +1012,16 @@ function renderTable() {
   document.getElementById('tableWrap').innerHTML=html;
 }
 
-function buildTblCell(w,day,exId) {
-  var log=getLog(w,day,exId);
-  var html='';
+function buildTblCell(w,day,exId){
+  var log=getLog(w,day,exId);var html='';
   for(var i=0;i<log.sets.length;i++){
     var s=log.sets[i];
-    html+='<div class="tbl-set-row">'
-      +'<span style="font-size:.62rem;color:var(--muted);min-width:12px">'+(i+1)+'.</span>'
+    html+='<div class="tbl-set-row"><span style="font-size:.62rem;color:var(--muted);min-width:12px">'+(i+1)+'.</span>'
       +'<input class="tbl-inp" type="number" inputmode="decimal" placeholder="kg" value="'+(s.w||'')+'" onchange="tblUpd('+w+','+day+',\''+exId+'\','+i+',\'w\',this.value)">'
       +'<span class="tbl-x">x</span>'
       +'<input class="tbl-inp ri" type="text" placeholder="reps" value="'+(s.r||'')+'" onchange="tblUpd('+w+','+day+',\''+exId+'\','+i+',\'r\',this.value)">'
       +'<button class="tbl-tick'+(s.done?' done':'')+'" onclick="tblTick('+w+','+day+',\''+exId+'\','+i+')">&#10003;</button>'
-      +'<button class="tbl-del" onclick="tblDel('+w+','+day+',\''+exId+'\','+i+')">&#10005;</button>'
-      +'</div>';
+      +'<button class="tbl-del" onclick="tblDel('+w+','+day+',\''+exId+'\','+i+')">&#10005;</button></div>';
   }
   html+='<button class="tbl-add" onclick="tblAdd('+w+','+day+',\''+exId+'\')">+ set</button>';
   return html;
@@ -982,33 +1032,29 @@ function tblDel(w,day,exId,idx){var log=getLog(w,day,exId);log.sets.splice(idx,1
 function tblAdd(w,day,exId){var log=getLog(w,day,exId);var last=log.sets.length>0?log.sets[log.sets.length-1]:null;log.sets.push({w:last?last.w:'',r:last?last.r:'',done:false});save();var el=document.getElementById('tc_'+w+'_'+day+'_'+exId);if(el){var sugg=getSuggested(exId,w);el.innerHTML=(sugg?'<div class="tbl-suggested">Sugg: '+sugg+'</div>':'')+buildTblCell(w,day,exId);}}
 
 // CSV
-function exportCSV() {
+function exportCSV(){
   var rows=[['Week','Block','Day','Exercise','Type','Set','Weight(kg)','Reps','Done','Suggested']];
   for(var w=1;w<=TOTAL_WEEKS;w++){
-    var b=getBlock(w);
-    for(var di=0;di<S.program.length;di++){
-      var dd=S.program[di];if(dd.rest)continue;
+    var b=getBlock(w);var prog=getProgramForWeek(w);
+    for(var di=0;di<prog.length;di++){
+      var dd=prog[di];if(dd.rest)continue;
       for(var ei=0;ei<dd.exercises.length;ei++){
-        var ex=dd.exercises[ei];
-        var log=S.logs[w]&&S.logs[w][dd.day]&&S.logs[w][dd.day][ex.id];
+        var ex=dd.exercises[ei];var log=S.logs[w]&&S.logs[w][dd.day]&&S.logs[w][dd.day][ex.id];
         var sugg=getSuggested(ex.id,w)||'';
         if(!log||!log.sets.length){rows.push([w,b.label,dd.name,ex.name,ex.type,'','','','No',sugg]);continue;}
-        for(var si=0;si<log.sets.length;si++){
-          var s=log.sets[si];
-          rows.push([w,b.label,dd.name,ex.name,ex.type,si+1,s.w||'',s.r||'',s.done?'Yes':'No',sugg]);
-        }
+        for(var si=0;si<log.sets.length;si++){var s=log.sets[si];rows.push([w,b.label,dd.name,ex.name,ex.type,si+1,s.w||'',s.r||'',s.done?'Yes':'No',sugg]);}
       }
     }
   }
   var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var blob=new Blob([csv],{type:'text/csv'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='meetprep_'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click();toast('CSV exported');
+  var blob=new Blob([csv],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='meetprep_'+new Date().toISOString().slice(0,10)+'.csv';a.click();toast('CSV exported');
 }
 
-// ── PROGRESS ──
-var progView='log', progExId=null;
+// ══════════════════════════════════════════════════════════════
+// PROGRESS
+// ══════════════════════════════════════════════════════════════
+var progView='log',progExId=null;
 function setProgView(v){
   progView=v;
   document.getElementById('progLogTab').style.display=v==='log'?'block':'none';
@@ -1019,13 +1065,16 @@ function setProgView(v){
 }
 function getAllExercises(){
   var items=[],seen={};
-  for(var di=0;di<S.program.length;di++){
-    var dd=S.program[di];if(dd.rest)continue;
-    for(var ei=0;ei<dd.exercises.length;ei++){
-      var ex=dd.exercises[ei];if(!ex.name)continue;
-      var key=ex.id;
-      if(seen[key])continue;seen[key]=true;
-      items.push({id:ex.id,label:ex.name+(ex.v?' ('+ex.v+')':''),day:dd.day,type:ex.type});
+  // Scan default + all snapshots to get full exercise list
+  var progs = [DEFAULT_PROGRAM];
+  for (var k in S.programSnapshots) progs.push(S.programSnapshots[k]);
+  for(var p=0;p<progs.length;p++){
+    for(var di=0;di<progs[p].length;di++){
+      var dd=progs[p][di];if(dd.rest)continue;
+      for(var ei=0;ei<dd.exercises.length;ei++){
+        var ex=dd.exercises[ei];if(!ex.name||seen[ex.id])continue;seen[ex.id]=true;
+        items.push({id:ex.id,label:ex.name+(ex.v?' ('+ex.v+')':''),day:dd.day,type:ex.type});
+      }
     }
   }
   return items;
@@ -1035,23 +1084,18 @@ function getExerciseData(exId,dayNum){
   for(var w=1;w<=TOTAL_WEEKS;w++){
     var log=S.logs[w]&&S.logs[w][dayNum]&&S.logs[w][dayNum][exId];
     var topW=null,topR=null;
-    if(log&&log.sets.length){
-      for(var si=0;si<log.sets.length;si++){
-        var s=log.sets[si];if(!s.w)continue;
-        var wv=parseFloat(s.w),rv=parseFloat(s.r)||0;
-        if(topW===null||wv>topW||(wv===topW&&rv>topR)){topW=wv;topR=rv;}
-      }
-    }
+    if(log&&log.sets.length){for(var si=0;si<log.sets.length;si++){
+      var s=log.sets[si];if(!s.w)continue;var wv=parseFloat(s.w),rv=parseFloat(s.r)||0;
+      if(topW===null||wv>topW||(wv===topW&&rv>topR)){topW=wv;topR=rv;}
+    }}
     var b=getBlock(w);
     data.push({week:w,w:topW,r:topR,blockWk:getBlockWeek(w),blockNum:b.num,blockLabel:b.label});
   }
   return data;
 }
 function renderProgress(){
-  var items=getAllExercises();
-  if(!progExId&&items.length)progExId=items[0].id;
-  var pickerHtml='';
-  for(var i=0;i<items.length;i++){
+  var items=getAllExercises();if(!progExId&&items.length)progExId=items[0].id;
+  var pickerHtml='';for(var i=0;i<items.length;i++){
     pickerHtml+='<button class="prog-ex-btn'+(progExId===items[i].id?' active':'')+'" onclick="selectProgEx(\''+items[i].id+'\')">'+items[i].label+'</button>';
   }
   document.getElementById('progGraphPicker').innerHTML=pickerHtml;
@@ -1062,12 +1106,8 @@ function renderProgLog(items){
   if(!items.length){document.getElementById('progLogContent').innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:20px 0">No exercises</div>';return;}
   var html='<div class="maxes-board">';
   for(var i=0;i<items.length;i++){
-    var item=items[i];
-    var data=getExerciseData(item.id,item.day);
-    var bestW=null,bestR=null;
-    for(var j=0;j<data.length;j++){
-      if(data[j].w!==null){if(bestW===null||data[j].w>bestW||(data[j].w===bestW&&data[j].r>bestR)){bestW=data[j].w;bestR=data[j].r;}}
-    }
+    var item=items[i],data=getExerciseData(item.id,item.day);var bestW=null,bestR=null;
+    for(var j=0;j<data.length;j++){if(data[j].w!==null){if(bestW===null||data[j].w>bestW||(data[j].w===bestW&&data[j].r>bestR)){bestW=data[j].w;bestR=data[j].r;}}}
     html+='<div class="max-row'+(bestW!==null?' has-data':'')+'" onclick="selectProgEx(\''+item.id+'\');setProgView(\'graph\')">';
     html+='<div class="max-row-left"><div class="max-row-name">'+item.label+'</div><div class="max-row-day">'+item.type+'</div></div>';
     html+='<div class="max-row-right">';
@@ -1075,54 +1115,53 @@ function renderProgLog(items){
     else{html+='<div class="max-row-empty">No data</div>';}
     html+='</div></div>';
   }
-  html+='</div>';
-  document.getElementById('progLogContent').innerHTML=html;
+  document.getElementById('progLogContent').innerHTML=html+'</div>';
 }
 function renderProgGraph(items){
-  var item=null;
-  for(var i=0;i<items.length;i++){if(items[i].id===progExId){item=items[i];break;}}
+  var item=null;for(var i=0;i<items.length;i++){if(items[i].id===progExId){item=items[i];break;}}
   if(!item)return;
   document.getElementById('graphTitle').textContent=item.label;
-  var data=getExerciseData(item.id,item.day);
-  var filled=[];
-  for(var i=0;i<data.length;i++){if(data[i].w!==null)filled.push({week:data[i].week,val:data[i].w,r:data[i].r,blockNum:data[i].blockNum,blockWk:data[i].blockWk,blockLabel:data[i].blockLabel});}
-  var chartEl=document.getElementById('mainChart');
-  var logHtml='';
-  if(filled.length<2){
-    chartEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.8rem">Need at least 2 weeks of data</div>';
-  } else {
-    var mn=Infinity,mx=-Infinity;
-    for(var i=0;i<filled.length;i++){if(filled[i].val<mn)mn=filled[i].val;if(filled[i].val>mx)mx=filled[i].val;}
+  var data=getExerciseData(item.id,item.day),filled=[];
+  for(var i=0;i<data.length;i++){if(data[i].w!==null)filled.push(data[i]);}
+  var chartEl=document.getElementById('mainChart'),logHtml='';
+  if(filled.length<2){chartEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.8rem">Need at least 2 weeks of data</div>';}
+  else{
+    var mn=Infinity,mx=-Infinity;for(var i=0;i<filled.length;i++){if(filled[i].w<mn)mn=filled[i].w;if(filled[i].w>mx)mx=filled[i].w;}
     var range=mx-mn;if(range===0){mn=mn*0.9;mx=mx*1.1;}else{mn=mn-range*0.1;mx=mx+range*0.1;}
     var W=300,H=100,pts='',area1='',area2='',circles='',labels='';
     for(var i=0;i<filled.length;i++){
-      var x=(i/(filled.length-1))*W,y=H-((filled[i].val-mn)/(mx-mn))*H;
+      var x=(i/(filled.length-1))*W,y=H-((filled[i].w-mn)/(mx-mn))*H;
       if(i>0){pts+=' ';area1+=' ';}pts+=x+','+y;area1+=x+','+y;
       circles+='<circle cx="'+x+'" cy="'+y+'" r="4" fill="var(--accent)"/>';
-      labels+='<text x="'+x+'" y="'+(y-7)+'" text-anchor="middle" font-size="7" fill="var(--accent)" font-family="DM Sans,sans-serif">'+filled[i].val+'</text>';
+      labels+='<text x="'+x+'" y="'+(y-7)+'" text-anchor="middle" font-size="7" fill="var(--accent)" font-family="DM Sans,sans-serif">'+filled[i].w+'</text>';
       labels+='<text x="'+x+'" y="'+(H+10)+'" text-anchor="middle" font-size="6" fill="var(--muted)" font-family="DM Sans,sans-serif">W'+filled[i].week+'</text>';
     }
     for(var i=filled.length-1;i>=0;i--){area2+=' '+((i/(filled.length-1))*W)+','+H;}
     chartEl.innerHTML='<svg viewBox="0 -10 '+W+' '+(H+16)+'" preserveAspectRatio="none">'
       +'<defs><linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".25"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'
       +'<polygon points="'+area1+area2+'" fill="url(#cg2)"/>'
-      +'<polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-      +circles+labels+'</svg>';
+      +'<polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+circles+labels+'</svg>';
   }
   for(var i=filled.length-1;i>=0;i--){
     var prev=i<filled.length-1?filled[i+1]:null;
-    var delta=prev?Math.round((filled[i].val-prev.val)*10)/10:null;
+    var delta=prev?Math.round((filled[i].w-prev.w)*10)/10:null;
     var dh=delta!==null?'<span class="delta '+(delta>0?'up':delta<0?'dn':'eq')+'">'+(delta>0?'+':'')+delta+'kg</span>':'';
-    logHtml+='<div class="prog-entry"><div><div class="pe-wk">'+filled[i].blockLabel+' · W'+filled[i].blockWk+'</div><div class="pe-val">'+filled[i].val+' kg</div></div>'+dh+'</div>';
+    logHtml+='<div class="prog-entry"><div><div class="pe-wk">'+filled[i].blockLabel+' · W'+filled[i].blockWk+'</div><div class="pe-val">'+filled[i].w+' kg</div></div>'+dh+'</div>';
   }
   document.getElementById('progGraphLog').innerHTML=logHtml;
 }
 
-// ── EDIT ──
+// ══════════════════════════════════════════════════════════════
+// EDIT — forward-only: edits apply from S.week onwards
+// ══════════════════════════════════════════════════════════════
 function renderEditView(){
+  document.getElementById('editDesc').textContent =
+    S.week === 12 ? 'Deload week cannot be edited.' :
+    'Editing week ' + S.week + '+. Changes apply from this week onwards. Previous weeks unchanged.';
+  var prog = getCurrentProgram();
   var html='';
-  for(var i=0;i<S.program.length;i++){
-    var d=S.program[i];
+  for(var i=0;i<prog.length;i++){
+    var d=prog[i];
     html+='<button class="edit-day-btn'+(d.day===S.editDay?' active':'')+'" onclick="setEditDay('+d.day+')">'+d.name+'</button>';
   }
   document.getElementById('editDayPicker').innerHTML=html;
@@ -1130,11 +1169,13 @@ function renderEditView(){
 }
 function setEditDay(d){S.editDay=d;renderEditView();}
 function renderEditList(){
+  var prog = getCurrentProgram();
   var dayData=null;
-  for(var i=0;i<S.program.length;i++){if(S.program[i].day===S.editDay){dayData=S.program[i];break;}}
+  for(var i=0;i<prog.length;i++){if(prog[i].day===S.editDay){dayData=prog[i];break;}}
   var list=document.getElementById('editList');
   if(!dayData){list.innerHTML='';return;}
   if(dayData.rest){list.innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:10px 0">Rest day — no exercises.</div>';return;}
+  if(S.week===12){list.innerHTML='<div style="color:var(--muted);font-size:.82rem;padding:10px 0">Deload week — not editable.</div>';return;}
   var html='';
   for(var i=0;i<dayData.exercises.length;i++){
     var ex=dayData.exercises[i];
@@ -1154,48 +1195,54 @@ function renderEditList(){
   list.innerHTML=html;
 }
 function updEx(dayNum,exId,field,val){
-  for(var i=0;i<S.program.length;i++){
-    if(S.program[i].day===dayNum){
-      for(var j=0;j<S.program[i].exercises.length;j++){
-        if(S.program[i].exercises[j].id===exId){S.program[i].exercises[j][field]=val;save();return;}
+  if(S.week===12)return;
+  var prog = getEditableProgram();
+  if(!prog)return;
+  for(var i=0;i<prog.length;i++){
+    if(prog[i].day===dayNum){
+      for(var j=0;j<prog[i].exercises.length;j++){
+        if(prog[i].exercises[j].id===exId){prog[i].exercises[j][field]=val;save();return;}
       }
     }
   }
 }
 function delEx(dayNum,exId){
-  if(!confirm('Delete this exercise?'))return;
-  for(var i=0;i<S.program.length;i++){
-    if(S.program[i].day===dayNum){
-      S.program[i].exercises=S.program[i].exercises.filter(function(e){return e.id!==exId;});break;
+  if(S.week===12)return;
+  if(!confirm('Delete this exercise from week '+S.week+' onwards?'))return;
+  var prog = getEditableProgram();
+  if(!prog)return;
+  for(var i=0;i<prog.length;i++){
+    if(prog[i].day===dayNum){
+      prog[i].exercises=prog[i].exercises.filter(function(e){return e.id!==exId;});break;
     }
   }
   save();renderEditList();
 }
 function addExercise(){
+  if(S.week===12)return;
+  var prog = getEditableProgram();
+  if(!prog)return;
   var dayData=null;
-  for(var i=0;i<S.program.length;i++){if(S.program[i].day===S.editDay){dayData=S.program[i];break;}}
+  for(var i=0;i<prog.length;i++){if(prog[i].day===S.editDay){dayData=prog[i];break;}}
   if(!dayData||dayData.rest)return;
   dayData.exercises.push({id:'d'+S.editDay+'e'+Date.now(),name:'',v:'',type:'accessory'});
   save();renderEditList();
 }
 
+// ══════════════════════════════════════════════════════════════
 // EXPORT / IMPORT
+// ══════════════════════════════════════════════════════════════
 function exportData(){
   var blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
   var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='meetprep_'+new Date().toISOString().slice(0,10)+'.json';
-  a.click();toast('Exported');
+  a.download='meetprep_'+new Date().toISOString().slice(0,10)+'.json';a.click();toast('Exported');
 }
 function importData(event){
   var file=event.target.files[0];if(!file)return;
   var reader=new FileReader();
   reader.onload=function(e){
-    try{var parsed=JSON.parse(e.target.result);
-      S.maxes=parsed.maxes||S.maxes;S.logs=parsed.logs||{};S.doneDays=parsed.doneDays||{};
-      S.week=parsed.week||1;S.day=parsed.day||1;
-      if(parsed.program)S.program=parsed.program;
-      save();renderAll();toast('Imported successfully');
-    }catch(err){toast('Could not read file');}
+    try{applyData(JSON.parse(e.target.result));save();renderAll();toast('Imported successfully');}
+    catch(err){toast('Could not read file');}
   };
   reader.readAsText(file);event.target.value='';
 }
@@ -1204,12 +1251,13 @@ function clearAllData(){
   S.logs={};S.doneDays={};save();renderAll();toast('All logs cleared');
 }
 
-// ── INIT ──
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
 function renderAll(){
   renderCountdown();renderMaxes();renderWeekBtns();renderDayTabs();renderDayContent();updateSwipeHints();
 }
 load();
-renderAll();
 </script>
 </body>
 </html>
