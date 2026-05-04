@@ -444,18 +444,100 @@ var DELOAD_PROGRAM = [
     {id:'d1e2',name:'High Bar Squat',v:'Back-off only — 4×5 @ 120kg',type:'backoff'},
     {id:'d1e4',name:'Bench Press',v:'Back-off only — 4×5 @ 82.5kg',type:'backoff'}
   ]},
-  {day:2,name:'Tue',rest:false,deloadNote:'RDL back-offs only. Skip if fatigued.',exercises:[
-    {id:'d2e1b',name:'RDL',v:'Back-off only — 2×6 @ 100kg',type:'backoff'}
-  ]},
-  {day:3,name:'Wed',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
-  {day:4,name:'Thu',rest:false,deloadNote:'Opener rehearsal — easy singles, leave immediately.',exercises:[
-    {id:'dl_sq',name:'Squat Opener',v:'170×1 — RPE 7 max',type:'main'},
-    {id:'dl_bp',name:'Bench Opener',v:'110×1 — RPE 7 max',type:'main'},
+  {day:2,name:'Tue',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:3,name:'Wed',rest:false,deloadNote:'DL opener — RPE 7 HARD CAP. Moved earlier in the week for extra recovery. If 220 feels heavier than 7, stop at the previous warm-up. Leave immediately when done.',exercises:[
     {id:'dl_dl',name:'Deadlift Opener',v:'220×1 — RPE 7 max',type:'main'}
+  ]},
+  {day:4,name:'Thu',rest:false,deloadNote:'Sq + Bench openers — RPE 7 HARD CAP. Leave immediately when done.',exercises:[
+    {id:'dl_sq',name:'Squat Opener',v:'170×1 — RPE 7 max',type:'main'},
+    {id:'dl_bp',name:'Bench Opener',v:'110×1 — RPE 7 max',type:'main'}
   ]},
   {day:5,name:'Fri',rest:true,restLabel:'Rest',restEmoji:'&#128161;',exercises:[]},
   {day:6,name:'Sat',rest:true,restLabel:'MEET DAY',restEmoji:'&#127942;',meetDay:true,exercises:[]},
   {day:7,name:'Sun',rest:true,restLabel:'Celebrate',restEmoji:'&#127881;',exercises:[]}
+];
+
+// ══════════════════════════════════════════════════════════════
+// W10 PROGRAM — Block 3 W3 — first taper of accessories
+// Main lifts unchanged. Accessories: -1 set across the board, RPE cap 8,
+// drop Nordic curl + Ring curl + Leg press + Sat curls. Cut tech bench volume.
+// ══════════════════════════════════════════════════════════════
+var W10_PROGRAM = [
+  {day:1,name:'Mon',rest:false,deloadNote:'Accessories taper begins — RPE 8 cap, -1 set across the board.',exercises:[
+    {id:'d1e1',name:'High Bar Squat',v:'Top set',type:'main'},
+    {id:'d1e2',name:'High Bar Squat',v:'Back-off — 4×5 · fixed from W1 of block',type:'backoff'},
+    {id:'d1e3',name:'Bench Press',v:'Top single',type:'main'},
+    {id:'d1e4',name:'Bench Press',v:'Back-off — 4×5 · top single −20% · fixed from W1',type:'backoff'},
+    {id:'d1e5',name:'Decline Fly',v:'2×8-10 · RPE 8',type:'accessory'},
+    {id:'d1e6',name:'Tricep Pushdown',v:'2×8-10 · RPE 8 · rope/V-bar',type:'accessory'},
+    {id:'d1e8',name:'Rear Delt Raise',v:'2×10-12 · RPE 8',type:'accessory'},
+    {id:'d1e9',name:'Lateral Raise',v:'2×10-12 · RPE 8',type:'accessory'}
+  ]},
+  {day:2,name:'Tue',rest:false,deloadNote:'Drop Nordic curl + Ring curl. Cut sets, RPE 8 cap.',exercises:[
+    {id:'d2e1',name:'RDL',v:'Top set — fixed reps, ascending RPE',type:'variation'},
+    {id:'d2e1b',name:'RDL',v:'Back-off — 2×6 · fixed from W1 of block',type:'backoff'},
+    {id:'d2e3',name:'Pelican Curl',v:'2×8-10 · RPE 8',type:'accessory'},
+    {id:'d2e5',name:'BOR',v:'2×6-8 · RPE 8',type:'accessory'},
+    {id:'d2e6',name:'Wide Grip Chin',v:'2×6-8 · RPE 8',type:'accessory'},
+    {id:'d2e10',name:'Narrow Grip Row',v:'2×6-8 · pull to hip · RPE 8',type:'accessory'},
+    {id:'d2e7',name:'Core / Abs',v:'2×10-15 · RPE 8',type:'accessory'}
+  ]},
+  {day:3,name:'Wed',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:4,name:'Thu',rest:false,deloadNote:'Drop Leg Press. Cut tech bench to 3 sets. RPE 8 cap.',exercises:[
+    {id:'d4e1',name:'Pause HB Squat',v:'Top set — 2-3s pause at bottom',type:'secondary'},
+    {id:'d4e2',name:'Pause HB Squat',v:'Back-off — 3×3 · fixed from W1 · maintain pause',type:'backoff'},
+    {id:'d4e3',name:'Technique Bench',v:'3×10-12 · low intensity · drill lockout & bar path · RPE 5-6',type:'variation'},
+    {id:'d4e4',name:'Incline Fly',v:'1×8-12 · RPE 8',type:'accessory'},
+    {id:'d4e5',name:'Tricep Pushdown',v:'2×8-10 · RPE 8 · rope/V-bar',type:'accessory'},
+    {id:'d4e6',name:'JM Press',v:'2×8-10 · low intensity · RPE 6-7',type:'accessory'},
+    {id:'d4e7',name:'Lateral Raise',v:'2×10-12 · RPE 8',type:'accessory'},
+    {id:'d4e8',name:'Leg Extension',v:'1×8-12 · RPE 8',type:'accessory'}
+  ]},
+  {day:5,name:'Fri',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:6,name:'Sat',rest:false,deloadNote:'Drop Sat curls (Ring + Pelican). Cut bench volume to 3 sets.',exercises:[
+    {id:'d6e1',name:'Sumo Deadlift',v:'Top set',type:'main'},
+    {id:'d6e2',name:'Sumo Deadlift',v:'Back-off — 3×4 · ~60% · fixed from W1',type:'backoff'},
+    {id:'d6e3',name:'Bench Press',v:'Tertiary single — always well below Mon',type:'secondary'},
+    {id:'d6e4',name:'Bench Press',v:'3×15-20 · low intensity · pec focus · RPE 5',type:'variation'},
+    {id:'d6e9',name:'DB Incline Press',v:'2×6-8 · semi-neutral grip · RPE 7',type:'accessory'},
+    {id:'d6e5',name:'Wide Grip Chin',v:'2×6-8 · RPE 8',type:'accessory'},
+    {id:'d6e6',name:'Power Shrugs',v:'2×5-6 · heavy · explosive',type:'accessory'}
+  ]},
+  {day:7,name:'Sun',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]}
+];
+
+// ══════════════════════════════════════════════════════════════
+// W11 PROGRAM — Block 3 W4 ★ PEAK — main lifts only + bare maintenance
+// RDL converted to single light top set (variation→accessory) to protect DL.
+// Pause Sq remains secondary (RPE 7-8 already reasonable).
+// ══════════════════════════════════════════════════════════════
+var W11_PROGRAM = [
+  {day:1,name:'Mon',rest:false,deloadNote:'★ PEAK day — main lifts only. Bare maintenance accessories. Leave when done.',exercises:[
+    {id:'d1e1',name:'High Bar Squat',v:'★ Peak top single',type:'main'},
+    {id:'d1e2',name:'High Bar Squat',v:'Back-off — 4×5 · fixed from W1 of block',type:'backoff'},
+    {id:'d1e3',name:'Bench Press',v:'★ Peak top single',type:'main'},
+    {id:'d1e4',name:'Bench Press',v:'Back-off — 4×5 · top single −20% · fixed from W1',type:'backoff'},
+    {id:'d1e6',name:'Tricep Pushdown',v:'1×8-10 · RPE 6-7 · blood flow only',type:'accessory'},
+    {id:'d1e9',name:'Lateral Raise',v:'1×10-12 · RPE 6 · blood flow only',type:'accessory'}
+  ]},
+  {day:2,name:'Tue',rest:false,deloadNote:'RDL reduced — top single only @ RPE 7, NO back-off. Protects posterior chain for Sat DL peak.',exercises:[
+    {id:'d2e1',name:'RDL',v:'Top single only — ~140×5 · RPE 7 max · NO back-off',type:'accessory'},
+    {id:'d2e6',name:'Wide Grip Chin',v:'1×6-8 · RPE 7',type:'accessory'},
+    {id:'d2e7',name:'Core / Abs',v:'1×10 · easy',type:'accessory'}
+  ]},
+  {day:3,name:'Wed',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:4,name:'Thu',rest:false,deloadNote:'Skill day only. No accessories. Leave immediately when done.',exercises:[
+    {id:'d4e1',name:'Pause HB Squat',v:'Top set — 2-3s pause at bottom',type:'secondary'},
+    {id:'d4e2',name:'Pause HB Squat',v:'Back-off — 3×3 · fixed from W1 · maintain pause',type:'backoff'},
+    {id:'d4e3',name:'Technique Bench',v:'2×10 · RPE 5 · groove only',type:'variation'}
+  ]},
+  {day:5,name:'Fri',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]},
+  {day:6,name:'Sat',rest:false,deloadNote:'★ DL PEAK — main lift only. Drop bench tertiary, bench volume, all curls. One light pulldown if you want, else leave.',exercises:[
+    {id:'d6e1',name:'Sumo Deadlift',v:'★ Peak top single',type:'main'},
+    {id:'d6e2',name:'Sumo Deadlift',v:'Back-off — 3×4 · ~60% · fixed from W1',type:'backoff'},
+    {id:'d6e5',name:'Wide Grip Chin',v:'1×6-8 · RPE 6 · optional · skip if you want',type:'accessory'}
+  ]},
+  {day:7,name:'Sun',rest:true,restLabel:'Rest',restEmoji:'&#128564;',exercises:[]}
 ];
 
 // ══════════════════════════════════════════════════════════════
@@ -471,19 +553,22 @@ var S = {
   day:1,
   editDay:1,
   progLift:'High Bar Squat',
-  programVersion:'v6'
+  programVersion:'v7'
 };
 
 // Get effective program for any week
 function getProgramForWeek(w) {
   if (w === 12) return DELOAD_PROGRAM;
-  // Find highest snapshot key <= w
+  // Find highest snapshot key <= w (user manual edits take priority)
   var bestKey = null;
   for (var k in S.programSnapshots) {
     var kn = parseInt(k);
     if (kn <= w && (bestKey === null || kn > bestKey)) bestKey = kn;
   }
   if (bestKey !== null) return JSON.parse(JSON.stringify(S.programSnapshots[bestKey]));
+  // Taper-specific programs override the default for late-block weeks
+  if (w === 11) return JSON.parse(JSON.stringify(W11_PROGRAM));
+  if (w === 10) return JSON.parse(JSON.stringify(W10_PROGRAM));
   return JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
 }
 
@@ -544,7 +629,7 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 
 function save() {
-  S.programVersion = 'v6';
+  S.programVersion = 'v7';
   try { localStorage.setItem('meetprep2026', JSON.stringify(S)); } catch(e) {}
   clearTimeout(syncTimeout);
   syncTimeout = setTimeout(function() { pushToSupabase(); }, 800);
